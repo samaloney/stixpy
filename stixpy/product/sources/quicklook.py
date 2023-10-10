@@ -2,6 +2,8 @@ from sunpy.time import TimeRange
 
 from stixpy.product.product import L1Product
 
+__all__ = ["QuickLookProduct", "QLLightCurve", "QLBackground"]
+
 
 class QuickLookProduct(L1Product):
     """
@@ -18,7 +20,7 @@ class QuickLookProduct(L1Product):
 
 class QLLightCurve(QuickLookProduct):
     """
-    Quicklook Lightcurves nominal in 5 energy bins every 4s
+    Quicklook Lightcurves nominally in 5 energy bins every 4s.
     """
     @classmethod
     def is_datasource_for(cls, *, meta, **kwargs):
@@ -35,7 +37,7 @@ class QLLightCurve(QuickLookProduct):
 
 class QLBackground(QuickLookProduct):
     """
-    Quicklook Background nominal in 5 energy bins every 8s
+    Quicklook Background nominally in 5 energy bins every 8s.
     """
     @classmethod
     def is_datasource_for(cls, *, meta, **kwargs):

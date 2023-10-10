@@ -19,11 +19,9 @@ from sunpy.util.datatype_factory_base import (
 from sunpy.util.exceptions import NoMapsInFileError, warn_user
 from sunpy.util.functools import seconddispatch
 from sunpy.util.io import is_url, parse_path, possibly_a_path
-from sunpy.util.metadata import MetaDict
 
 from stixpy.product.product import GenericProduct
 from stixpy.utils.logging import get_logger
-from stixpy.product.sources import *
 
 
 __all__ = ['Product', 'ProductFactory']
@@ -41,14 +39,14 @@ logger = get_logger(__name__)
 
 def read_qtable(file, hdu, hdul=None):
     """
-    Read a fits extension into a QTable and maintain dtypes of columns with units
+    Read a FITS extension into a QTable and maintain dtypes of columns with units.
 
     Hack to work around QTable not respecting the dtype in fits file see
     https://github.com/astropy/astropy/issues/12494
 
     Parameters
     ----------
-    input : `str`, `pathlib.Path`, `astropy.io.fits.HDUList` or `astropy.io.fits.HDU`
+    file : `str`, `pathlib.Path`, `astropy.io.fits.HDUList` or `astropy.io.fits.HDU`
         Fits file
     hdu : int or str, optional
         The HDU to read the table from.
@@ -210,7 +208,7 @@ class ProductFactory(BasicRegistrationFactory):
 
         if self._validate_meta(meta):
             pair = (meta, control, data, *other)
-        return [pair]
+            return [pair]
 
     # @_parse_arg.register(DatabaseEntryType)
     # def _parse_dbase(self, arg, **kwargs):
@@ -326,4 +324,4 @@ class FileError(ValueError):
 
 
 Product = ProductFactory(registry=GenericProduct._registry, default_widget_type=GenericProduct,
-                 additional_validation_functions=['is_datasource_for'])
+                         additional_validation_functions=['is_datasource_for'])

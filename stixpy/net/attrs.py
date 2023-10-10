@@ -4,7 +4,7 @@ __all__ = ['DataType', 'DataProduct']
 
 DATA_TYPES = ['QL', 'SCI', 'HK', 'CAL']
 DATA_PRODUCTS = ['ql_lightcurve', 'ql_background', 'ql_variance', 'ql_spectra',
-                 'ql_calibration_spectrum', 'ql_flareflag', 'sci_xray_l0','sci_xray_l1',
+                 'ql_calibration_spectrum', 'ql_flareflag', 'sci_xray_l0', 'sci_xray_l1',
                  'sci_xray_l2', 'sci_xray_l3', 'sci_spectrogram', 'sci_visibility']
 
 

@@ -1,27 +1,24 @@
 from collections import defaultdict
 from itertools import product
 
-from pathlib import Path
-
 import astropy.units as u
 import numpy as np
 
-from astropy.io import fits
 from astropy.table import QTable, vstack
-from astropy.time import Time, TimeDelta
+from astropy.time import Time
 from astropy.visualization import quantity_support
 from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
-from matplotlib.dates import date2num, HourLocator, DateFormatter
+from matplotlib.dates import HourLocator, DateFormatter
 from matplotlib.widgets import Slider
 from sunpy.time.timerange import TimeRange
+
+from stixpy.product.product import L1Product
 
 __all__ = ['ScienceData', 'RawPixelData', 'CompressedPixelData', 'SummedCompressedPixelData',
            'Visibility', 'Spectrogram', 'TimesSeriesPlotMixin', 'SpectrogramPlotMixin',
            'PixelPlotMixin', 'PPrintMixin', 'IndexMasks', 'DetectorMasks', 'PixelMasks',
            'EnergyMasks']
-
-from stixpy.product.product import L1Product
 
 quantity_support()
 
@@ -45,12 +42,13 @@ class PPrintMixin:
 
 class IndexMasks(PPrintMixin):
     """
+    Index Masks
 
     Attributes
     ----------
-    masks : 'numpy.ndarray`
+    masks : `numpy.ndarray`
         The mask arrays
-    indices : `numpy.ndarray'
+    indices : `numpy.ndarray`
         The indices the mask/s applies to
 
     """
@@ -118,6 +116,7 @@ class SpectrogramPlotMixin:
 
         Parameters
         ----------
+
         axes : optional `matplotlib.axes`
             The axes the plot the spectrogram.
         time_indices : `list` or `numpy.ndarray`
@@ -128,6 +127,10 @@ class SpectrogramPlotMixin:
             If an 1xN array will be treated as mask if 2XN array will sum data between given
             indices. For example `energy_indices=[0, 2, 5]` would return only the first, third and
             sixth times while `energy_indices=[[0, 2],[3, 5]]` would sum the data between.
+        pixel_indices : `str` or `list`, `numpy.ndarray` optional
+            Pixel indices to include in plot.
+        detector_indices : `str` or `list`, `numpy.ndarray` optional
+            Detector indices to include in plot.
         **plot_kwargs : `dict`
             Any additional arguments are passed to :meth:`~matplotlib.axes.Axes.pcolormesh`.
 
@@ -183,12 +186,12 @@ class SpectrogramPlotMixin:
         else:
             fig = axes.get_figure()
 
-        pcolor_kwargs = {'norm':LogNorm(), 'shading':'flat'}
+        pcolor_kwargs = {'norm': LogNorm(), 'shading': 'flat'}
         pcolor_kwargs.update(plot_kwargs)
         im = axes.pcolormesh(t_edges.datetime, e_edges[1:-1], counts[:, 0, 0, 1:-1].T.value,
                              **pcolor_kwargs)
 
-        #axes.colorbar(im).set_label(format(counts.unit))
+        # axes.colorbar(im).set_label(format(counts.unit))
         axes.xaxis_date()
         # axes.set_yticks(range(y_lims[0], y_lims[1] + 1))
         # axes.set_yticklabels(labels)
@@ -206,9 +209,9 @@ class TimesSeriesPlotMixin:
     TimesSeries plot mixin providing timeseries plotting for pixel data.
     """
     def plot_timeseries(self, time_indices=None, energy_indices=None, detector_indices='all',
-                        pixel_indices='all', axes=None, error_bar=False, **plot_kwarg):
+                        pixel_indices='all', axes=None, error_bar=False, **plot_kwargs):
         """
-        Plot a times series of the selected times and energies.
+        Plot a time series from the selected time, energies, detectors and pixels.
 
         Parameters
         ----------
@@ -263,10 +266,10 @@ class TimesSeriesPlotMixin:
         for did, pid, eid in product(range(n_det), range(n_pix), range(n_energy)):
             if error_bar:
                 lines = axes.errorbar(times.to_datetime(), counts[:, did, pid, eid], yerr=errors[:, did, pid, eid],
-                                      label=labels[eid], **plot_kwarg)
+                                      label=labels[eid], **plot_kwargs)
             else:
                 lines = axes.plot(times.to_datetime(), counts[:, did, pid, eid],
-                                  label=labels[eid], **plot_kwarg)
+                                  label=labels[eid], **plot_kwargs)
 
         axes.set_yscale('log')
         axes.xaxis.set_major_formatter(DateFormatter("%d %H:%M"))
@@ -334,10 +337,13 @@ class PixelPlotMixin:
         for detector_id in range(32):
             row, col = divmod(detector_id, 8)
             for pixel_id in pixel_ids:
-                errbar_cont = axes[row, col].errorbar((0.5, 1.5, 2.5, 3.5),
-                                                      counts[0, detector_id, pixel_id, 0],
-                                                      yerr=count_err[0, detector_id, pixel_id, 0],
-                                                      xerr=0.5, ls='')
+                c = counts[0, detector_id, pixel_id, 0]
+                ce = count_err[0, detector_id, pixel_id, 0]
+                if c.size == 0:
+                    c = [0, 0, 0, 0]
+                if ce.size == 0:
+                    ce = [0, 0, 0, 0]
+                errbar_cont = axes[row, col].errorbar((0.5, 1.5, 2.5, 3.5), c, yerr=ce, xerr=0.5, ls='')
 
                 containers[row, col].append(errbar_cont)
                 axes[row, col].set_xlim(0, 4)
@@ -364,23 +370,30 @@ class PixelPlotMixin:
 
                 for i, pid in enumerate(pids_):
                     lines, caps, bars = containers[r, c][i]
-                    lines.set_ydata(counts[time_index, did, pid, energy_index])
+
+                    cc = counts[time_index, did, pid, energy_index]
+                    cce = count_err[time_index, did, pid, energy_index]
+                    if cc.size == 0:
+                        cc = np.array([0, 0, 0, 0])
+
+                    if cce.size == 0:
+                        cce = np.array([0, 0, 0, 0])
+
+                    lines.set_ydata(cc)
 
                     # horizontal bars at value
                     segs = np.array(bars[0].get_segments())
                     segs[:, 0, 0] = [0., 1., 2., 3.]
                     segs[:, 1, 0] = [1., 2., 3., 4.]
-                    segs[:, 0, 1] = counts[time_index, did, pid, energy_index]
-                    segs[:, 1, 1] = counts[time_index, did, pid, energy_index]
+                    segs[:, 0, 1] = cc
+                    segs[:, 1, 1] = cc
                     bars[0].set_segments(segs)
                     # vertical bars at +/- error
                     segs = np.array(bars[1].get_segments())
                     segs[:, 0, 0] = [0.5, 1.5, 2.5, 3.5]
                     segs[:, 1, 0] = [0.5, 1.5, 2.5, 3.5]
-                    segs[:, 0, 1] = counts[time_index, did, pid, energy_index] \
-                        - count_err[time_index, did, pid, energy_index]
-                    segs[:, 1, 1] = counts[time_index, did, pid, energy_index] \
-                        + count_err[time_index, did, pid, energy_index]
+                    segs[:, 0, 1] = cc - cce
+                    segs[:, 1, 1] = cc + cce
                     bars[1].set_segments(segs)
 
         senergy.on_changed(update)
@@ -396,7 +409,7 @@ class ScienceData(L1Product):
 
         Parameters
         ----------
-        header : `astropy.fits.Header`
+        meta : `astropy.fits.Header`
             Fits header
         control : `astropy.table.QTable`
             Fits file control extension
@@ -642,7 +655,7 @@ class ScienceData(L1Product):
                 data = vstack([data, other.data])
 
             return type(self)(meta=self.meta, control=control, data=data,
-                              energies=self.energies, idb_version=self.idb_versions)
+                              energies=self.energies, idb_versions=self.idb_versions)
 
     def __repr__(self):
         return f'{self.__class__.__name__}' \
@@ -732,7 +745,7 @@ class CompressedPixelData(ScienceData, PixelPlotMixin, TimesSeriesPlotMixin, Spe
 class SummedCompressedPixelData(ScienceData, PixelPlotMixin, TimesSeriesPlotMixin,
                                 SpectrogramPlotMixin):
     """
-    Compressed and Summed count data from selected pixels, detectors and energies.
+    Summed compressed count data from selected pixels, detectors and energies.
 
     Examples
     --------

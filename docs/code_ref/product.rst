@@ -5,10 +5,6 @@ Product ('stixpy.product')
 
 .. module:: stixpy.product
 
-.. testsetup::
-
-    import sunpy
-
 .. currentmodule:: stixpy.product
 
 Overview

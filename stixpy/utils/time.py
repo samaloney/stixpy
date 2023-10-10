@@ -36,7 +36,7 @@ def times_to_indices(in_times, obs_times, unit=u.ms, decimals=3):
                                      decimals=decimals)
             unique_only = True
         else:
-            target_times = relative_times[[0,-1]]
+            target_times = relative_times[[0, -1]]
     elif isinstance(in_times, Time):
         ndim = in_times.ndim
         target_times = np.around((in_times - obs_times[0]).to(unit), decimals=decimals)
@@ -73,14 +73,16 @@ def _closest_index_loop(a, b):
         out[i] = (np.abs(val-b)).argmin()
     return out
 
+
 def _closest_index_searchsorted(a, b):
     L = b.size
     sidx_b = b.argsort()
     sorted_b = b[sidx_b]
     sorted_idx = np.searchsorted(sorted_b, a)
     sorted_idx[sorted_idx == L] = L - 1
-    mask = (sorted_idx > 0) & ((np.abs(a - sorted_b[sorted_idx - 1]) <= np.abs(a - sorted_b[sorted_idx])))
+    mask = (sorted_idx > 0) & (np.abs(a - sorted_b[sorted_idx - 1]) <= np.abs(a - sorted_b[sorted_idx]))
     return sidx_b[sorted_idx - mask]
+
 
 def _closest_index_broadcast(a, b):
     return np.abs(a[:, None] - b[None, :]).argmin(axis=-1)

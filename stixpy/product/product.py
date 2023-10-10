@@ -66,6 +66,7 @@ class LevelBinary(GenericProduct):
         if level == 'LB':
             return True
 
+
 class L1Product(GenericProduct):
     """Level Binary data"""
     def __init__(self, **kwargs):
@@ -78,6 +79,7 @@ class L1Product(GenericProduct):
             data['time'] = Time(meta['date-obs']) + data['time']
         except KeyError:
             data['time'] = Time(meta['date_obs']) + data['time']
+
 
 class Level2(GenericProduct):
     """Level Binary data"""

@@ -100,7 +100,7 @@ class QLLightCurve(GenericTimeSeries):
         labels = [f'{col}' for col in self.columns[5:]]
 
         lines = [axes.plot_date(dates, self.to_dataframe().iloc[:, 5+i], '-', label=labels[i], **plot_args)
-         for i in range(5)]
+                 for i in range(5)]
 
         axes.legend(loc='upper right')
 
@@ -155,7 +155,7 @@ class QLLightCurve(GenericTimeSeries):
 
         data['counts'] = data['counts'] / (live_time.reshape(-1, 1) * energy_delta)
 
-        names = ['{:d}-{:d} keV'.format(energies["e_low"][i].astype(int),energies["e_high"][i].astype(int)) for i in range(5)]
+        names = ['{:d}-{:d} keV'.format(energies["e_low"][i].astype(int), energies["e_high"][i].astype(int)) for i in range(5)]
 
         [data.add_column(data['counts'][:, i], name=names[i]) for i in range(5)]
         data.remove_column('counts')
@@ -470,7 +470,7 @@ class QLVariance(GenericTimeSeries):
 
         label = f'{self.columns[2]} keV'
 
-        axes.plot_date(dates, self.to_dataframe().iloc[:, 2], '-', label=label) #, **plot_args)
+        axes.plot_date(dates, self.to_dataframe().iloc[:, 2], '-', label=label)  # , **plot_args)
 
         axes.legend(loc='upper right')
 
@@ -521,7 +521,7 @@ class QLVariance(GenericTimeSeries):
         data = Table(hdulist[2].data)
         energies = Table(hdulist[4].data)
         dE = energies[control['energy_bin_mask'][0]]['e_high'][-1] \
-             - energies[control['energy_bin_mask'][0]]['e_low'][0] << u.keV
+                              - energies[control['energy_bin_mask'][0]]['e_low'][0] << u.keV
         name = f'{energies[control["energy_bin_mask"][0]]["e_low"][0]}' \
                f'-{energies[control["energy_bin_mask"][0]]["e_high"][-1]}'
 

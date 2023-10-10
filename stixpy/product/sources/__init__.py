@@ -1,3 +1,4 @@
-from stixpy.product.sources.housekeeping import *
-from stixpy.product.sources.quicklook import *
-from stixpy.product.sources.science import *
+from stixpy.product.product_factory import Product
+from .housekeeping import *
+from .quicklook import *
+from .science import *

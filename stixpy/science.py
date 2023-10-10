@@ -2,6 +2,7 @@ from astropy.utils import deprecated
 
 from stixpy.product import Product
 
+__all__ = ["ScienceData"]
 
 class StixpyDepreciationWarning(Warning):
     """

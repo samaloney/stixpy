@@ -8,9 +8,8 @@ Code Reference
    :maxdepth: 2
 
    data
-   timeseries
-   science
-   product
-   visualisation
    frames
-   products
+   product
+   science
+   timeseries
+   visualisation

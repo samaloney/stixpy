@@ -1,7 +1,7 @@
 """
 
 Examples
--------
+--------
 An AIA map
 
 .. plot::
@@ -130,7 +130,8 @@ def create_headers(obs_ref_coord, map, out_shape=None, out_scale=None):
     obs_ref_coord : `sunpy.map.Map`
         Target WCS reference coordinate (as seen by observer).
         Generated in map_reproject_to_observer function.
-
+    map : `sunpy.map.Map`
+        The input map to be reprojected.
     out_shape : `tuple`
         The shape of the reprojected map - defaults to (512, 512)
 
