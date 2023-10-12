@@ -152,5 +152,8 @@ docs/whatsnew/latest_changelog.txt
 stixpy/version.py
 htmlcov/
 
+#MacOS
+.DS_store
+
 #stixpy
 stixpy/data/*.fits
