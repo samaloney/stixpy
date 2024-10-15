@@ -1,0 +1,1 @@
+Fix bug in grid transmission calculation, the orientation was erroneously being off set by 180 degrees.
