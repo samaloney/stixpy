@@ -1125,10 +1125,10 @@ class ScienceData(L1Product):
         #         np.array(counts_err.value), allow_pickle=True)
 
 
-        return counts_corr, counts_err, times, t_norm, energies
+        return counts_corr, counts_err, times, t_norm, livefrac, energies
         
     
-    def get_spectrum(self):
+    def get_spectrum(self, bkg_file=None):
         
         det_indices_top24 =  np.array([0, 1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 19, 
                                      20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31])
@@ -1139,156 +1139,57 @@ class ScienceData(L1Product):
 
         pix_indices = np.where(self.pixel_masks.__dict__['masks'] == 1 )[1]
 
-        rate_full, rate_err_full, times_full, t_norm_cs_full, energies = self.get_data()
+        rate, rate_err, times, t_norm_cs, livefrac, energies = self.get_data()
 
-        # print('rate_full = ',rate_full)
-        # print('rate_full = ',rate_full[:,:,:,20:29])
-        # print('rate_full shape = ',rate_full.shape)
-        
-        # if event_time_range:
-            
-        #     td = t_norm_cs_full[:,det_indices].mean(axis=1).squeeze()/2
-
-        #     print('td = ',td)
-
-        #     times_start = times_full - td
-        #     times_end= times_full + td
-
-        #     inds = np.where( (times_start >= Time(event_time_range[0]) ) & (times_end <= Time(event_time_range[-1]) ) )[0]
-
-        #     print('tlen tinds = ',len(inds))
-
-
-        #     rate = rate_full[inds]
-        #     rate_err = rate_err_full[inds]
-        #     times = times_full[inds]
-        #     t_norm_cs = t_norm_cs_full[inds]
-        
-        # else:
-
-        rate = rate_full
-        rate_err = rate_err_full
-        times = times_full
-        t_norm_cs = t_norm_cs_full         
 
         de = np.array(energies['e_high'] - energies['e_low']) * u.keV
 
+        t_diff = t_norm_cs.to(u.s)
 
-        t_diff_cs = t_norm_cs
-        t_diff = t_diff_cs.to(u.s)
-
-
-        # if event_time_range:
-
-        #     counts_kev = rate * t_diff_cs
-        #     counts = counts_kev * de
-
-        #     counts = counts.sum(axis=0)
-        #     # t_diff = t_diff.mean(axis=1).sum(axis=0).squeeze()
-        #     t_diff = t_diff.mean(axis=1).sum(axis=0).squeeze()
-
-
-
-        #     result_count_rate_full = counts / t_diff
-        #     result_count_rate_det = result_count_rate_full[det_indices, :, :]
-        #     result_count_rate_det_pix =   result_count_rate_det[:, pix_indices, :]
-        #     result_count_rate = result_count_rate_det_pix.sum(axis=(0,1)) / de
-
-        #     counts_err_kev = rate_err * t_diff_cs
-        #     counts_err = counts_err_kev * de
-
-        #     counts_err = counts_err.sum(axis=0)
-
-        #     result_count_err_rate_full = counts_err / t_diff
-        #     result_count_err_rate_det =result_count_err_rate_full[det_indices, :, :]
-        #     result_count_err_rate_det_pix =result_count_err_rate_det[:, pix_indices, :]
-        #     result_count_err_rate = np.sqrt(((result_count_err_rate_det_pix**2).sum(axis=(0,1)) ) ) / de
-
-        #     if energies['e_low'][0].value == 0:
-
-        #         result_count_rate = result_count_rate[1:]
-        #         result_count_err_rate = result_count_err_rate[1:]
-        #         energies = energies[1:]
-
-        # else:
-
-        counts_kev = rate * t_diff_cs
+        counts_kev = rate * t_norm_cs
         counts = counts_kev * de
+
 
         result_count_rate_full = counts
         result_count_rate_det = result_count_rate_full[:, det_indices, :, :]
         result_count_rate_det_pix =   result_count_rate_det[:, :, pix_indices, :]
         result_count_rate = result_count_rate_det_pix.sum(axis=(1,2)) 
 
-        # t_diff = np.squeeze(t_diff, axis=2)
-        # t_diff_cs = np.squeeze(t_diff_cs, axis=2)
-        # e_norm_2 = e_norm[:,:,pix_indices,:].mean(axis=2)
+
+
+        result_count_rate_full_corr = counts / livefrac
+        result_count_rate_det_corr = result_count_rate_full_corr[:, det_indices, :, :]
+        result_count_rate_det_pix_corr =   result_count_rate_det_corr[:, :, pix_indices, :]
+        result_count_rate_corr = result_count_rate_det_pix_corr.sum(axis=(1,2))        
+
+
  
-        counts_err_kev = rate_err * t_diff_cs
+        counts_err_kev = rate_err *  t_norm_cs
         counts_err = counts_err_kev * de
         result_count_err_rate_full = counts_err
-        # result_count_err_rate_det =result_count_err_rate_full[:, det_indices, :]
         result_count_err_rate_det =result_count_err_rate_full[:, det_indices, :, :]
         result_count_err_rate_det_pix =result_count_err_rate_det[:, :, pix_indices, :]
         result_count_err_rate = np.sqrt(((result_count_err_rate_det_pix**2).sum(axis=(1,2)) ) ) 
-            # result_count_err_rate = np.sqrt(((result_count_err_rate_det**2).sum(axis=(1)) ) )
+
 
         if energies['e_low'][0].value == 0:
 
             result_count_rate = result_count_rate[:,1:]
+            result_count_rate_corr = result_count_rate_corr[:,1:]
             result_count_err_rate = result_count_err_rate[:,1:]
             energies = energies[1:]
     
         t_diff = t_diff[:,det_indices].mean(axis=1).squeeze()
 
-
+        eff_livefrac = result_count_rate.sum(axis=(1))  / result_count_rate_corr.sum(axis=(1)) 
 
         data_dictionary = {'rate':result_count_rate,
                         'rate_err':result_count_err_rate,
                         'times':times,
                         'time_bin':t_diff,
+                        'livefrac':eff_livefrac,
                         'energies':energies}
 
-
-        # if event_time_range:
-            
-        #     count = result_count_rate * t_diff
-        #     count_err = result_count_err_rate * t_diff
-
-        #     inds = np.where( (times >= Time(event_time_range[0]) ) & (times <= Time(event_time_range[1]) ) )[0]
-
-        #     # count_sum = np.sum(count[inds],axis=0)
-        #     # count_err_sum = np.sum(count_err[inds],axis=0)
-        #     print('count_shape = ',np.shape(count))
-        #     print('count_shape = ',np.shape(count))
-
-        #     count_sum = count[inds]
-        #     count_err_sum = count_err[inds]
-
-        #     data_dictionary = {'rate':result_count_rate,
-        #                     'rate_err':count_err_sum,
-        #                     'times':times,
-        #                     'time_bin':t_diff,
-        #                    'energies':energies}
-
-        
-
-        # print('t_shape = ',dt.shape)
-
-        # dt = np.squeeze(dt, axis=(2,3))
-
-        # counts_err_kev = rate_err 
-        # counts_err = counts_err_kev 
-        # result_count_err_rate_full = counts_err 
-        # # result_count_err_rate_det =result_count_err_rate_full[:, det_indices, :]
-        # result_count_err_rate_det =np.sqrt((result_count_err_rate_full[:, det_indices, :, :]**2).sum(axis=1))
-        # result_count_err_rate_det_pix = np.sqrt((result_count_err_rate_det[:, pix_indices, :]**2).sum(axis=1))
-        # result_count_err_rate = result_count_err_rate_det_pix/ (dt.to(u.s))
-        # result_count_err_rate = result_count_err_rate / (de)
-
-        # print(result_count_err_rate.shape())
-
-        # result_count_err_rate = np.sqrt(((result_count_err_rate_det**2).sum(axis=(1)) ) )
 
         return data_dictionary    
 
