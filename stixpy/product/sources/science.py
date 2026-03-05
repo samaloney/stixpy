@@ -1094,10 +1094,6 @@ class ScienceData(L1Product):
 
         counts_err = np.sqrt(counts*u.ct + counts_var) 
 
-        # print('counts_err = ',counts_err)
-        # print('counts_err = ',np.shape(counts_err))
-        # np.save('/home/jmitchell/Documents/SOLER/spectroscopy/stixpy_testing/spec_test/error_test/counts_err_check_stixpy.npy',counts_err.value, allow_pickle=True)
-
         counts_corr = counts / (e_norm * t_norm)
 
         counts_lower = counts / (t_norm_lower)
@@ -1105,24 +1101,9 @@ class ScienceData(L1Product):
 
         livetime_error = (counts_upper - counts_lower)  / 2
 
-        # print('t_norm_shape = ',np.shape(t_norm))
-        # print('e_norm_shape = ',np.shape(e_norm))
 
-        # livetime_error = livetime_error[:,:,pix_indices,:].mean(axis=2)
-        # counts_err = np.sqrt((counts_err[:,:,pix_indices,:]**2).sum(axis=2))
-        # t_norm_2 = np.squeeze(t_norm, axis=2)
-        # e_norm_2 = np.squeeze(e_norm, axis=2)
-
-        # counts_err_2 = (counts_err/(e_norm)) * e_norm_energies
-        # print('counts_err = ',np.shape(counts_err_2)) 
-        # # print(counts_err_2.unit)
-        # np.save('/home/jmitchell/Documents/SOLER/spectroscopy/stixpy_testing/spec_test/error_test/counts_err_check_stixpy_2.npy',
-        #         np.array(counts_err_2.value), allow_pickle=True)
 
         counts_err = np.sqrt(((counts_err/t_norm)**2) + (livetime_error**2)) / (e_norm) 
-
-        # np.save('/home/jmitchell/Documents/SOLER/spectroscopy/stixpy_testing/spec_test/error_test/counts_err_check_stixpy_3.npy',
-        #         np.array(counts_err.value), allow_pickle=True)
 
 
         return counts_corr, counts_err, times, t_norm, livefrac, energies
@@ -1161,11 +1142,11 @@ class ScienceData(L1Product):
         result_count_rate_full_corr = counts / livefrac
         result_count_rate_det_corr = result_count_rate_full_corr[:, det_indices, :, :]
         result_count_rate_det_pix_corr =   result_count_rate_det_corr[:, :, pix_indices, :]
-        result_count_rate_corr = result_count_rate_det_pix_corr.sum(axis=(1,2))        
+        result_count_rate_corr = result_count_rate_det_pix_corr.sum(axis=(1,2)) 
 
         counts_err_kev = rate_err *  t_norm_cs
         counts_err = counts_err_kev * de
-        result_count_err_rate_full = counts_err
+        result_count_err_rate_full = counts_err / livefrac
         result_count_err_rate_det =result_count_err_rate_full[:, det_indices, :, :]
         result_count_err_rate_det_pix =result_count_err_rate_det[:, :, pix_indices, :]
         result_count_err_rate = np.sqrt(((result_count_err_rate_det_pix**2).sum(axis=(1,2)) ) ) 
@@ -1217,32 +1198,44 @@ class ScienceData(L1Product):
 
             counts_err_kev_bkg = rate_err_bkg *  t_norm_cs_bkg
             counts_err_bkg = counts_err_kev_bkg * de_bkg
-            counts_err_bkg = counts_err_bkg 
+
             result_count_err_rate_full_bkg = counts_err_bkg
             result_count_err_rate_det_bkg =result_count_err_rate_full_bkg[:, det_indices, :, :]
             result_count_err_rate_det_pix_bkg =result_count_err_rate_det_bkg[:, :, pix_indices, :]
-            result_count_err_rate_bkg = np.sqrt(((result_count_err_rate_det_pix_bkg**2).sum(axis=(1,2)) ) ) 
+            result_count_err_rate_bkg = np.sqrt(((result_count_err_rate_det_pix_bkg**2).sum(axis=(1,2)) ) )
+            step_err = np.sqrt((result_count_err_rate_bkg**2).sum(axis=0)) / dt_bkg.mean()
+            result_count_err_rate_bkg = dt.reshape(len(dt),1) @ step_err.reshape(1,len(step))   
+
+            result_count_err_rate_full_corr_bkg = counts_err_bkg / livefrac_bkg
+            result_count_err_rate_det_corr_bkg =result_count_err_rate_full_corr_bkg[:, det_indices, :, :]
+            result_count_err_rate_det_corr_pix_bkg =result_count_err_rate_det_corr_bkg[:, :, pix_indices, :]
+            result_count_err_rate_bkg_corr = np.sqrt(((result_count_err_rate_det_corr_pix_bkg**2).sum(axis=(1,2)) ) )
+            step_err_corr = np.sqrt((result_count_err_rate_bkg_corr**2).sum(axis=0)) / dt_bkg.mean()
+            result_count_err_rate_bkg_corr = dt.reshape(len(dt),1) @ step_err_corr.reshape(1,len(step)) 
 
             spec_in_corr = result_count_rate_corr - result_count_rate_corr_bkg
             spec_in = result_count_rate - result_count_rate_bkg
+
+            spec_in_corr_err = np.sqrt(result_count_err_rate**2 + result_count_err_rate_bkg**2) 
 
             if energies['e_low'][0].value == 0:
 
                 spec_in = spec_in[:,1:]
                 spec_in_corr = spec_in_corr[:,1:]
-                result_count_err_rate = result_count_err_rate[:,1:]
+                spec_in_corr_err = spec_in_corr_err[:,1:]
                 energies = energies[1:]
 
         else:
 
             spec_in_corr = result_count_rate_corr
-            spec_in = result_count_rate 
+            spec_in = result_count_rate
+            spec_in_corr_err= result_count_err_rate
 
             if energies['e_low'][0].value == 0:
 
                 spec_in = spec_in[:,1:]
                 spec_in_corr = spec_in_corr[:,1:]
-                result_count_err_rate = result_count_err_rate[:,1:]
+                spec_in_corr_err = spec_in_corr_err[:,1:]
                 energies = energies[1:]
         
         t_diff = t_diff[:,det_indices].mean(axis=1).squeeze()
@@ -1252,11 +1245,12 @@ class ScienceData(L1Product):
         eff_livefrac = spec_in.sum(axis=(1))  / spec_in_corr.sum(axis=(1)) 
 
         spec_in_final = spec_in_corr * eff_livefrac[:,None]
+        spec_in_corr_err_final = spec_in_corr_err * eff_livefrac[:,None]
 
         # dt = dt.squeeze().mean(axis=1)
 
         data_dictionary = {'rate':spec_in_final,
-                        'rate_err':result_count_err_rate,
+                        'rate_err':spec_in_corr_err_final,
                         'times':times,
                         'time_bin':dt,
                         'livefrac':eff_livefrac,
