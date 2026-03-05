@@ -67,10 +67,13 @@ def estimate_flare_location(sci_file,time_range_sci):
     # because WCS axes and array are reversed
     max_stix = fd_bp_map.pixel_to_world(max_pixel[1], max_pixel[0])
 
-    # hpc_x = max_stix.transform_to(frames.Helioprojective).Tx.value
-    # hpc_y = max_stix.transform_to(frames.Helioprojective).Ty.value
+    hpc_x = max_stix.transform_to(frames.Helioprojective).Tx.value
+    hpc_y = max_stix.transform_to(frames.Helioprojective).Ty.value
 
-    hpc_x = max_stix.Tx.value
-    hpc_y = max_stix.Ty.value
+    stx_x = max_stix.Tx.value
+    stx_y = max_stix.Ty.value
 
-    return np.array([hpc_x,hpc_y])
+    dictionary = {'stx':np.array([stx_x,stx_y]),
+                  'hpc':np.array([hpc_x,hpc_y])}
+
+    return dictionary

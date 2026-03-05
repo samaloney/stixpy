@@ -914,11 +914,11 @@ class ScienceData(L1Product):
         e_norm = self.dE
         t_norm = self.data["timedel"]
 
-        print('time_dels = ',t_norm)
+        # print('time_dels = ',t_norm)
         
         counts = self.data["counts"]
 
-        print('counts = ',np.shape(counts))
+        # print('counts = ',np.shape(counts))
 
         try:
             counts_var = self.data["counts_comp_err"] ** 2
@@ -926,7 +926,7 @@ class ScienceData(L1Product):
             counts_var = self.data["counts_comp_comp_err"] ** 2
         shape = counts.shape
 
-        print('shape_counts = ',np.shape(counts_var) )
+        # print('shape_counts = ',np.shape(counts_var) )
 
         if livetime_correction:
 
@@ -954,10 +954,10 @@ class ScienceData(L1Product):
             t_norm_lower = t_norm * livefrac_lower
             t_norm_upper = t_norm * livefrac_upper
 
-            print('tnorm = ',t_norm)
+            # print('tnorm = ',t_norm)
         
-        print('td*lf = ',t_norm.mean(axis=1).squeeze())
-        print('lf = ',np.shape(livefrac))
+        # print('td*lf = ',t_norm.mean(axis=1).squeeze())
+        # print('lf = ',np.shape(livefrac))
 
         if elut_correction:
 
@@ -973,6 +973,8 @@ class ScienceData(L1Product):
 
         energies = self.energies[:]
         times = self.times
+
+        # print('TIMES = ',times)
 
         if detector_indices is not None:
             detecor_indices = np.asarray(detector_indices)
@@ -1126,7 +1128,7 @@ class ScienceData(L1Product):
         return counts_corr, counts_err, times, t_norm, energies
         
     
-    def get_spectrum(self,event_time_range=None):
+    def get_spectrum(self):
         
         det_indices_top24 =  np.array([0, 1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 19, 
                                      20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31])
@@ -1139,90 +1141,108 @@ class ScienceData(L1Product):
 
         rate_full, rate_err_full, times_full, t_norm_cs_full, energies = self.get_data()
 
+        # print('rate_full = ',rate_full)
+        # print('rate_full = ',rate_full[:,:,:,20:29])
+        # print('rate_full shape = ',rate_full.shape)
         
-        if event_time_range:
+        # if event_time_range:
             
-            td = t_norm_cs_full.mean(axis=1).squeeze()/2
+        #     td = t_norm_cs_full[:,det_indices].mean(axis=1).squeeze()/2
 
-            times_start = times_full - td
-            times_end= times_full + td
+        #     print('td = ',td)
 
-            inds = np.where( (times_start >= Time(event_time_range[0]) ) & (times_end <= Time(event_time_range[-1]) ) )[0]
+        #     times_start = times_full - td
+        #     times_end= times_full + td
 
-            rate = rate_full[inds]
-            rate_err = rate_err_full[inds]
-            times = times_full[inds]
-            t_norm_cs = t_norm_cs_full[inds]
+        #     inds = np.where( (times_start >= Time(event_time_range[0]) ) & (times_end <= Time(event_time_range[-1]) ) )[0]
+
+        #     print('tlen tinds = ',len(inds))
+
+
+        #     rate = rate_full[inds]
+        #     rate_err = rate_err_full[inds]
+        #     times = times_full[inds]
+        #     t_norm_cs = t_norm_cs_full[inds]
         
-        else:
+        # else:
 
-            rate = rate_full
-            rate_err = rate_err_full
-            times = times_full
-            t_norm_cs = t_norm_cs_full          
+        rate = rate_full
+        rate_err = rate_err_full
+        times = times_full
+        t_norm_cs = t_norm_cs_full         
 
-        de = np.array(energies['e_high'] - energies['e_low'])
+        de = np.array(energies['e_high'] - energies['e_low']) * u.keV
 
 
         t_diff_cs = t_norm_cs
         t_diff = t_diff_cs.to(u.s)
 
 
-        if event_time_range:
+        # if event_time_range:
 
-            counts_kev = rate * t_diff_cs
-            counts = counts_kev * de
+        #     counts_kev = rate * t_diff_cs
+        #     counts = counts_kev * de
 
-            counts = counts.sum(axis=0)
-            t_diff = t_diff.mean(axis=1).sum(axis=0).squeeze()
+        #     counts = counts.sum(axis=0)
+        #     # t_diff = t_diff.mean(axis=1).sum(axis=0).squeeze()
+        #     t_diff = t_diff.mean(axis=1).sum(axis=0).squeeze()
 
-            result_count_rate_full = counts / t_diff
-            result_count_rate_det = result_count_rate_full[det_indices, :, :]
-            result_count_rate_det_pix =   result_count_rate_det[:, pix_indices, :]
-            result_count_rate = result_count_rate_det_pix.sum(axis=(0,1))
 
-            counts_err_kev = rate_err * t_diff_cs
-            counts_err = counts_err_kev * de
 
-            counts_err = counts_err.sum(axis=0)
+        #     result_count_rate_full = counts / t_diff
+        #     result_count_rate_det = result_count_rate_full[det_indices, :, :]
+        #     result_count_rate_det_pix =   result_count_rate_det[:, pix_indices, :]
+        #     result_count_rate = result_count_rate_det_pix.sum(axis=(0,1)) / de
 
-            result_count_err_rate_full = counts_err / t_diff
-            result_count_err_rate_det =result_count_err_rate_full[det_indices, :, :]
-            result_count_err_rate_det_pix =result_count_err_rate_det[:, pix_indices, :]
-            result_count_err_rate = np.sqrt(((result_count_err_rate_det_pix**2).sum(axis=(0,1)) ) )
+        #     counts_err_kev = rate_err * t_diff_cs
+        #     counts_err = counts_err_kev * de
 
-            if energies['e_low'][0].value == 0:
+        #     counts_err = counts_err.sum(axis=0)
 
-                result_count_rate = result_count_rate[1:]
-                result_count_err_rate = result_count_err_rate[1:]
-                energies = energies[1:]
+        #     result_count_err_rate_full = counts_err / t_diff
+        #     result_count_err_rate_det =result_count_err_rate_full[det_indices, :, :]
+        #     result_count_err_rate_det_pix =result_count_err_rate_det[:, pix_indices, :]
+        #     result_count_err_rate = np.sqrt(((result_count_err_rate_det_pix**2).sum(axis=(0,1)) ) ) / de
 
-        else:
+        #     if energies['e_low'][0].value == 0:
 
-            result_count_rate_full = counts / t_diff
-            result_count_rate_det = result_count_rate_full[:, det_indices, :, :]
-            result_count_rate_det_pix =   result_count_rate_det[:, :, pix_indices, :]
-            result_count_rate = result_count_rate_det_pix.sum(axis=(1,2))
+        #         result_count_rate = result_count_rate[1:]
+        #         result_count_err_rate = result_count_err_rate[1:]
+        #         energies = energies[1:]
 
-            # t_diff = np.squeeze(t_diff, axis=2)
-            # t_diff_cs = np.squeeze(t_diff_cs, axis=2)
-            # e_norm_2 = e_norm[:,:,pix_indices,:].mean(axis=2)
+        # else:
 
-            counts_err_kev = rate_err * t_diff_cs
-            counts_err = counts_err_kev * de
-            result_count_err_rate_full = counts_err / t_diff
-            # result_count_err_rate_det =result_count_err_rate_full[:, det_indices, :]
-            result_count_err_rate_det =result_count_err_rate_full[:, det_indices, :, :]
-            result_count_err_rate_det_pix =result_count_err_rate_det[:, :, pix_indices, :]
-            result_count_err_rate = np.sqrt(((result_count_err_rate_det_pix**2).sum(axis=(1,2)) ) )
-            result_count_err_rate = np.sqrt(((result_count_err_rate_det**2).sum(axis=(1)) ) )
+        counts_kev = rate * t_diff_cs
+        counts = counts_kev * de
 
-            if energies['e_low'][0].value == 0:
+        result_count_rate_full = counts
+        result_count_rate_det = result_count_rate_full[:, det_indices, :, :]
+        result_count_rate_det_pix =   result_count_rate_det[:, :, pix_indices, :]
+        result_count_rate = result_count_rate_det_pix.sum(axis=(1,2)) 
 
-                result_count_rate = result_count_rate[:,1:]
-                result_count_err_rate = result_count_err_rate[:,1:]
-                energies = energies[1:]
-        
+        # t_diff = np.squeeze(t_diff, axis=2)
+        # t_diff_cs = np.squeeze(t_diff_cs, axis=2)
+        # e_norm_2 = e_norm[:,:,pix_indices,:].mean(axis=2)
+ 
+        counts_err_kev = rate_err * t_diff_cs
+        counts_err = counts_err_kev * de
+        result_count_err_rate_full = counts_err
+        # result_count_err_rate_det =result_count_err_rate_full[:, det_indices, :]
+        result_count_err_rate_det =result_count_err_rate_full[:, det_indices, :, :]
+        result_count_err_rate_det_pix =result_count_err_rate_det[:, :, pix_indices, :]
+        result_count_err_rate = np.sqrt(((result_count_err_rate_det_pix**2).sum(axis=(1,2)) ) ) 
+            # result_count_err_rate = np.sqrt(((result_count_err_rate_det**2).sum(axis=(1)) ) )
+
+        if energies['e_low'][0].value == 0:
+
+            result_count_rate = result_count_rate[:,1:]
+            result_count_err_rate = result_count_err_rate[:,1:]
+            energies = energies[1:]
+    
+        t_diff = t_diff[:,det_indices].mean(axis=1).squeeze()
+
+
+
         data_dictionary = {'rate':result_count_rate,
                         'rate_err':result_count_err_rate,
                         'times':times,
@@ -1273,28 +1293,97 @@ class ScienceData(L1Product):
         return data_dictionary    
 
 
-    def get_spec_obj(self,event_time_range,flare_location):
+    def get_spec_obj(self,event_time_range,flare_angle,srm_dictionary=None,bkg_data=None,flare_location=None):
 
-        data_dict = self.get_spectrum(event_time_range=event_time_range)
-        srm_dict = self.get_masked_srm(flare_location=flare_location) 
 
+        if not bkg_data:
+
+            data_dict = self.get_spectrum()
+            counts_axis = np.concatenate([data_dict['energies']['e_low'],[data_dict['energies']['e_high'][-1]]]) 
+            
+            de = np.diff(counts_axis)[np.newaxis,:]
+            dt = data_dict['time_bin'][:, np.newaxis]
+
+            times_full = data_dict['times']
+ 
+
+            counts = data_dict['rate'] 
+            counts_uncertainity = data_dict['rate_err'] 
+
+            times_start = times_full - (data_dict['time_bin']/2)           
+            times_end = times_full + (data_dict['time_bin']/2)
+
+            inds = np.where( (times_start >= Time(event_time_range[0]) ) & (times_end <= Time(event_time_range[-1]) ) )[0]
+
+            # print('len inds = ', len(inds))
+
+            counts_final = counts[inds].sum(axis=0)
+            counts_uncertainity_final = np.sqrt((counts_uncertainity[inds]**2).sum(axis=0))
+
+            counts_uncertainity_pu = PoissonUncertainty(counts_uncertainity_final)
+            counts_spectral_axis = SpectralAxis(counts_axis, bin_specification='edges')
+
+            t_norm = data_dict['time_bin'][inds]
+
+        else:            
+
+            data_dict = self.bkg_subtract(bkg_data=bkg_data)
+            counts_axis = np.concatenate([data_dict['energies']['e_low'],[data_dict['energies']['e_high'][-1]]]) 
+
+            de = np.diff(counts_axis)[np.newaxis, :]
+            dt = data_dict['time_bin'][:, np.newaxis]
+
+            times_full = data_dict['times']
+ 
+            counts = data_dict['rate_bkg_sub']
+
+            print('ct_check_prev = ',len(counts[counts<0]))
+
+            counts[np.nonzero(counts < 0)] = 0
+
+            print('ct_shape = ',counts.shape)
+            print('ct_check_post = ',len(counts[counts<0]))
+
+            counts_uncertainity = data_dict['rate_err_bkg_sub'] 
+
+            times_start = times_full - (data_dict['time_bin']/2)           
+            times_end = times_full + (data_dict['time_bin']/2)
+
+            inds = np.where( (times_start >= Time(event_time_range[0]) ) & (times_end <= Time(event_time_range[-1]) ) )[0]
+      
+            counts_final = counts[inds].sum(axis=0)
+            counts_uncertainity_final = np.sqrt((counts_uncertainity[inds]**2).sum(axis=0))
+
+            counts_uncertainity_pu = PoissonUncertainty(counts_uncertainity_final)
+            counts_spectral_axis = SpectralAxis(counts_axis, bin_specification='edges')
+    
+            t_norm = data_dict['time_bin'][inds]
+
+
+        if not srm_dictionary:
+            srm_dict = self.get_masked_srm(flare_location=flare_location) 
+        else:
+            srm_dict=srm_dictionary
+
+        distance = (self.meta['DSUN_OBS'] * u.m).to(u.AU) 
 
         meta = NDMeta()
 
-        meta.add("exposure_time", data_dict['time_bin'])
+        meta.add("exposure_time", np.sum(t_norm))
         meta.add("geo_area", srm_dict['geo_area'])
-        meta.add("date-obs",  data_dict['time'])
-        # meta.add("angle",angle)
-        # meta.add("distance",distance)
+        meta.add("date-obs",  data_dict['times'])
+        meta.add("angle",flare_angle)
+        meta.add("distance",distance)
         meta.add("srm",srm_dict['srm'])
         meta.add("ph_axis",srm_dict['ph_axis'])
 
+        spec_1d = Spectrum(data=counts_final,uncertainty=counts_uncertainity_pu, spectral_axis=counts_spectral_axis, meta=meta)
+
+        return spec_1d
 
 # NEED TO ADD IN THE DIST AND ANGLE READING AND BKG_SUBTRACT, GETTING THERE THOUGH!!!
 
-
-
-    def bkg_subract(self, bkg_data):
+    def bkg_subtract(self, bkg_data):
 
         spec_unsub = self.get_spectrum()
         
@@ -1304,8 +1393,14 @@ class ScienceData(L1Product):
         rate_err = spec_unsub['rate_err']
         energies = spec_unsub['energies']
 
-        bkg_rate = bkg_data['rate']
-        bkg_rate_err = bkg_data['rate_err']
+        bkg_time_bin = bkg_data['time_bin']
+        # print(bkg_data['rate'])
+        bkg_rate = (bkg_data['rate'] / bkg_time_bin) * time_bins[:,np.newaxis]
+
+# LIVETIME CORRECTED + EFFECTIVE LIVEWTIME MIGHT WORK
+
+        # print(bkg_rate)
+        bkg_rate_err = (bkg_data['rate_err'] / bkg_time_bin) * time_bins[:,np.newaxis]
         bkg_energies = bkg_data['energies']
 
         _, _, indices_sub = np.intersect1d(
@@ -1314,11 +1409,19 @@ class ScienceData(L1Product):
             return_indices=True
         )
 
+        # print(energies)
+        # print(bkg_energies)
+
+        print('e_bkg = ',bkg_energies)
+
+        print('e_dat = ',energies)
+        print('in_sub = ',indices_sub)
+
         bkg_rate_sub = bkg_rate[:,indices_sub]
         bkg_rate_err_sub = bkg_rate_err[:,indices_sub]
- 
+
         rate_sub = rate - bkg_rate_sub
-        rate_err_sub = np.sqrt((rate_err.value**2) + (bkg_rate_err_sub.value**2))
+        rate_err_sub = np.sqrt((rate_err.value**2) + (bkg_rate_err_sub.value**2))  *u.ct
 
         spec_sub = {'rate_bkg_sub':rate_sub,
                     'rate_err_bkg_sub':rate_err_sub,
@@ -1361,7 +1464,7 @@ class ScienceData(L1Product):
             e_edges = np.concatenate([e_low,[e_high[-1]]])
             ct_e_diff = np.diff(e_edges)
 
-        print('ct_shape = ',len(ct_e_diff))
+        # print('ct_shape = ',len(ct_e_diff))
 
         # drm_clipped = drm[1:-1, 1:-1]
         # ph_energies_clipped = ph_energies[1:-1]
@@ -1386,6 +1489,8 @@ class ScienceData(L1Product):
                 atol=epsilon
             ).any(axis=1)
         )[0]
+
+
 
 
         drm_clipped = np.delete(drm, indices_to_remove, axis=0)
