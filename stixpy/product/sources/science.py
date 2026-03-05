@@ -1128,7 +1128,7 @@ class ScienceData(L1Product):
         return counts_corr, counts_err, times, t_norm, livefrac, energies
         
     
-    def get_spectrum(self, bkg_file=None):
+    def get_spectrum(self, bkg_prod=None):
         
         det_indices_top24 =  np.array([0, 1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 19, 
                                      20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31])
@@ -1142,6 +1142,7 @@ class ScienceData(L1Product):
         rate, rate_err, times, t_norm_cs, livefrac, energies = self.get_data()
 
 
+
         de = np.array(energies['e_high'] - energies['e_low']) * u.keV
 
         t_diff = t_norm_cs.to(u.s)
@@ -1149,21 +1150,19 @@ class ScienceData(L1Product):
         counts_kev = rate * t_norm_cs
         counts = counts_kev * de
 
+        dt = (t_diff / livefrac)
+        dt = dt.squeeze().mean(axis=1)
 
         result_count_rate_full = counts
         result_count_rate_det = result_count_rate_full[:, det_indices, :, :]
         result_count_rate_det_pix =   result_count_rate_det[:, :, pix_indices, :]
         result_count_rate = result_count_rate_det_pix.sum(axis=(1,2)) 
 
-
-
         result_count_rate_full_corr = counts / livefrac
         result_count_rate_det_corr = result_count_rate_full_corr[:, det_indices, :, :]
         result_count_rate_det_pix_corr =   result_count_rate_det_corr[:, :, pix_indices, :]
         result_count_rate_corr = result_count_rate_det_pix_corr.sum(axis=(1,2))        
 
-
- 
         counts_err_kev = rate_err *  t_norm_cs
         counts_err = counts_err_kev * de
         result_count_err_rate_full = counts_err
@@ -1171,22 +1170,95 @@ class ScienceData(L1Product):
         result_count_err_rate_det_pix =result_count_err_rate_det[:, :, pix_indices, :]
         result_count_err_rate = np.sqrt(((result_count_err_rate_det_pix**2).sum(axis=(1,2)) ) ) 
 
+        if bkg_prod:
 
-        if energies['e_low'][0].value == 0:
+            rate_bkg, rate_err_bkg, times_bkg, t_norm_cs_bkg, livefrac_bkg, energies_bkg = bkg_prod.get_data()
 
-            result_count_rate = result_count_rate[:,1:]
-            result_count_rate_corr = result_count_rate_corr[:,1:]
-            result_count_err_rate = result_count_err_rate[:,1:]
-            energies = energies[1:]
-    
+
+            de_bkg = np.array(energies_bkg['e_high'] - energies_bkg['e_low']) * u.keV
+
+            t_diff_bkg = t_norm_cs_bkg.to(u.s)
+
+            dt_bkg = (t_diff_bkg / livefrac_bkg)
+
+            _, _, indices_sub = np.intersect1d(
+                energies['e_low'],
+                energies_bkg['e_low'],
+                return_indices=True
+            )
+
+            rate_bkg = rate_bkg[:,:,:,indices_sub]
+            rate_err_bkg = rate_err_bkg[:,:,:,indices_sub]
+            de_bkg = de[indices_sub]
+
+            counts_kev_bkg  = rate_bkg  * t_norm_cs_bkg 
+            counts_bkg  = counts_kev_bkg  * de_bkg 
+
+            # dt = dt.squeeze().mean(axis=1)
+            dt_bkg = dt_bkg.squeeze()
+
+            print('dt_bkg =',dt_bkg)
+            print('dt_shape =',dt.shape)
+            # result_count_rate_full_bkg  = (counts_bkg /  dt_bkg) * dt
+            result_count_rate_full_bkg  = counts_bkg
+            result_count_rate_det_bkg  = result_count_rate_full_bkg[:, det_indices, :, :]
+            result_count_rate_det_pix_bkg  =  result_count_rate_det_bkg[:, :, pix_indices, :]
+            result_count_rate_bkg  = result_count_rate_det_pix_bkg.sum(axis=(1,2)) 
+            step = result_count_rate_bkg.sum(axis=0) / dt_bkg.mean()
+            result_count_rate_bkg = dt.reshape(len(dt),1) @ step.reshape(1,len(step))  
+
+            # result_count_rate_full_corr_bkg  = (counts_bkg  / (livefrac_bkg * dt_bkg)) * dt
+            result_count_rate_full_corr_bkg  = counts_bkg / livefrac_bkg
+            result_count_rate_det_corr_bkg = result_count_rate_full_corr_bkg[:, det_indices, :, :]
+            result_count_rate_det_pix_corr_bkg =   result_count_rate_det_corr_bkg[:, :, pix_indices, :]
+            result_count_rate_corr_bkg = result_count_rate_det_pix_corr_bkg.sum(axis=(1,2)) 
+            step_corr = result_count_rate_corr_bkg.sum(axis=0) / dt_bkg.mean()
+            result_count_rate_corr_bkg = dt.reshape(len(dt),1) @ step_corr.reshape(1,len(step))  
+
+            counts_err_kev_bkg = rate_err_bkg *  t_norm_cs_bkg
+            counts_err_bkg = counts_err_kev_bkg * de_bkg
+            counts_err_bkg = counts_err_bkg 
+            result_count_err_rate_full_bkg = counts_err_bkg
+            result_count_err_rate_det_bkg =result_count_err_rate_full_bkg[:, det_indices, :, :]
+            result_count_err_rate_det_pix_bkg =result_count_err_rate_det_bkg[:, :, pix_indices, :]
+            result_count_err_rate_bkg = np.sqrt(((result_count_err_rate_det_pix_bkg**2).sum(axis=(1,2)) ) ) 
+
+            spec_in_corr = result_count_rate_corr - result_count_rate_corr_bkg
+            spec_in = result_count_rate - result_count_rate_bkg
+
+            if energies['e_low'][0].value == 0:
+
+                spec_in = spec_in[:,1:]
+                spec_in_corr = spec_in_corr[:,1:]
+                result_count_err_rate = result_count_err_rate[:,1:]
+                energies = energies[1:]
+
+        else:
+
+            spec_in_corr = result_count_rate_corr
+            spec_in = result_count_rate 
+
+            if energies['e_low'][0].value == 0:
+
+                spec_in = spec_in[:,1:]
+                spec_in_corr = spec_in_corr[:,1:]
+                result_count_err_rate = result_count_err_rate[:,1:]
+                energies = energies[1:]
+        
         t_diff = t_diff[:,det_indices].mean(axis=1).squeeze()
 
-        eff_livefrac = result_count_rate.sum(axis=(1))  / result_count_rate_corr.sum(axis=(1)) 
+        # eff_livefrac = result_count_rate.sum(axis=(1))  / result_count_rate_corr.sum(axis=(1)) 
 
-        data_dictionary = {'rate':result_count_rate,
+        eff_livefrac = spec_in.sum(axis=(1))  / spec_in_corr.sum(axis=(1)) 
+
+        spec_in_final = spec_in_corr * eff_livefrac[:,None]
+
+        # dt = dt.squeeze().mean(axis=1)
+
+        data_dictionary = {'rate':spec_in_final,
                         'rate_err':result_count_err_rate,
                         'times':times,
-                        'time_bin':t_diff,
+                        'time_bin':dt,
                         'livefrac':eff_livefrac,
                         'energies':energies}
 
@@ -1224,11 +1296,11 @@ class ScienceData(L1Product):
             counts_uncertainity_pu = PoissonUncertainty(counts_uncertainity_final)
             counts_spectral_axis = SpectralAxis(counts_axis, bin_specification='edges')
 
-            t_norm = data_dict['time_bin'][inds]
+            t_norm = data_dict['time_bin'][inds] * data_dict['livefrac'][inds]
 
         else:            
 
-            data_dict = self.bkg_subtract(bkg_data=bkg_data)
+            data_dict = self.get_spectrum(bkg_prod=bkg_data)
             counts_axis = np.concatenate([data_dict['energies']['e_low'],[data_dict['energies']['e_high'][-1]]]) 
 
             de = np.diff(counts_axis)[np.newaxis, :]
@@ -1236,7 +1308,7 @@ class ScienceData(L1Product):
 
             times_full = data_dict['times']
  
-            counts = data_dict['rate_bkg_sub']
+            counts = data_dict['rate']
 
             print('ct_check_prev = ',len(counts[counts<0]))
 
@@ -1245,7 +1317,7 @@ class ScienceData(L1Product):
             print('ct_shape = ',counts.shape)
             print('ct_check_post = ',len(counts[counts<0]))
 
-            counts_uncertainity = data_dict['rate_err_bkg_sub'] 
+            counts_uncertainity = data_dict['rate_err'] 
 
             times_start = times_full - (data_dict['time_bin']/2)           
             times_end = times_full + (data_dict['time_bin']/2)
@@ -1258,7 +1330,7 @@ class ScienceData(L1Product):
             counts_uncertainity_pu = PoissonUncertainty(counts_uncertainity_final)
             counts_spectral_axis = SpectralAxis(counts_axis, bin_specification='edges')
     
-            t_norm = data_dict['time_bin'][inds]
+            t_norm = data_dict['time_bin'][inds] * data_dict['livefrac'][inds]
 
 
         if not srm_dictionary:
