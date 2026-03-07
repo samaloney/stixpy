@@ -963,8 +963,14 @@ class ScienceData(L1Product):
 
             _, _, elut_cor_fac = get_elut_correction(np.array(self.energies['channel']), self)
 
+            print('elut_corr_fac = ', elut_cor_fac)
             e_norm_energies = e_norm
             e_norm = e_norm / elut_cor_fac
+        
+        else:
+            e_norm_energies = e_norm
+            elut_cor_fac = 1
+
 
     
         if len(shape) < 4:
@@ -1090,6 +1096,9 @@ class ScienceData(L1Product):
             counts = counts[...,valid_mask]
             counts_var = counts_var[...,valid_mask]
 
+            if elut_correction:
+                elut_cor_fac = elut_cor_fac[valid_mask]
+
             energies = energies[valid_mask]
 
         counts_err = np.sqrt(counts*u.ct + counts_var) 
@@ -1106,7 +1115,7 @@ class ScienceData(L1Product):
         counts_err = np.sqrt(((counts_err/t_norm)**2) + (livetime_error**2)) / (e_norm) 
 
 
-        return counts_corr, counts_err, times, t_norm, livefrac, energies
+        return counts_corr, counts_err, times, t_norm, livefrac, energies, elut_cor_fac
         
     
     def get_spectrum(self, bkg_prod=None):
@@ -1120,11 +1129,12 @@ class ScienceData(L1Product):
 
         pix_indices = np.where(self.pixel_masks.__dict__['masks'] == 1 )[1]
 
-        rate, rate_err, times, t_norm_cs, livefrac, energies = self.get_data()
+        rate, rate_err, times, t_norm_cs, livefrac, energies, elut_cor_fac = self.get_data()
 
-
+        # energies = self.energies
 
         de = np.array(energies['e_high'] - energies['e_low']) * u.keV
+
 
         t_diff = t_norm_cs.to(u.s)
 
@@ -1153,8 +1163,9 @@ class ScienceData(L1Product):
 
         if bkg_prod:
 
-            rate_bkg, rate_err_bkg, times_bkg, t_norm_cs_bkg, livefrac_bkg, energies_bkg = bkg_prod.get_data()
+            rate_bkg, rate_err_bkg, times_bkg, t_norm_cs_bkg, livefrac_bkg, energies_bkg, _ = bkg_prod.get_data(elut_correction=False)
 
+            # energies_bkg = bkg_prod.energies
 
             de_bkg = np.array(energies_bkg['e_high'] - energies_bkg['e_low']) * u.keV
 
@@ -1168,9 +1179,14 @@ class ScienceData(L1Product):
                 return_indices=True
             )
 
-            rate_bkg = rate_bkg[:,:,:,indices_sub]
-            rate_err_bkg = rate_err_bkg[:,:,:,indices_sub]
-            de_bkg = de[indices_sub]
+            print('ind_sub = ',indices_sub)
+            print('e = ',energies['e_low'])
+            print('ebkg = ',energies_bkg['e_low']) 
+            print('ebkg_ind = ',energies_bkg['e_low'][indices_sub])       
+
+            rate_bkg = rate_bkg[:,:,:,indices_sub] * elut_cor_fac
+            rate_err_bkg = rate_err_bkg[:,:,:,indices_sub]* elut_cor_fac
+            de_bkg = de_bkg[indices_sub]
 
             counts_kev_bkg  = rate_bkg  * t_norm_cs_bkg 
             counts_bkg  = counts_kev_bkg  * de_bkg 
@@ -1178,7 +1194,7 @@ class ScienceData(L1Product):
             # dt = dt.squeeze().mean(axis=1)
             dt_bkg = dt_bkg.squeeze()
 
-            print('dt_bkg =',dt_bkg)
+            print('dt_bkg =',dt_bkg.shape)
             print('dt_shape =',dt.shape)
             # result_count_rate_full_bkg  = (counts_bkg /  dt_bkg) * dt
             result_count_rate_full_bkg  = counts_bkg
@@ -1186,7 +1202,7 @@ class ScienceData(L1Product):
             result_count_rate_det_pix_bkg  =  result_count_rate_det_bkg[:, :, pix_indices, :]
             result_count_rate_bkg  = result_count_rate_det_pix_bkg.sum(axis=(1,2)) 
             step = result_count_rate_bkg.sum(axis=0) / dt_bkg.mean()
-            result_count_rate_bkg = dt.reshape(len(dt),1) @ step.reshape(1,len(step))  
+            result_count_rate_bkg = dt.reshape(len(dt),1) * step.reshape(1,len(step))  
 
             # result_count_rate_full_corr_bkg  = (counts_bkg  / (livefrac_bkg * dt_bkg)) * dt
             result_count_rate_full_corr_bkg  = counts_bkg / livefrac_bkg
@@ -1194,7 +1210,7 @@ class ScienceData(L1Product):
             result_count_rate_det_pix_corr_bkg =   result_count_rate_det_corr_bkg[:, :, pix_indices, :]
             result_count_rate_corr_bkg = result_count_rate_det_pix_corr_bkg.sum(axis=(1,2)) 
             step_corr = result_count_rate_corr_bkg.sum(axis=0) / dt_bkg.mean()
-            result_count_rate_corr_bkg = dt.reshape(len(dt),1) @ step_corr.reshape(1,len(step))  
+            result_count_rate_corr_bkg = dt.reshape(len(dt),1) * step_corr.reshape(1,len(step))  
 
             counts_err_kev_bkg = rate_err_bkg *  t_norm_cs_bkg
             counts_err_bkg = counts_err_kev_bkg * de_bkg
@@ -1204,19 +1220,23 @@ class ScienceData(L1Product):
             result_count_err_rate_det_pix_bkg =result_count_err_rate_det_bkg[:, :, pix_indices, :]
             result_count_err_rate_bkg = np.sqrt(((result_count_err_rate_det_pix_bkg**2).sum(axis=(1,2)) ) )
             step_err = np.sqrt((result_count_err_rate_bkg**2).sum(axis=0)) / dt_bkg.mean()
-            result_count_err_rate_bkg = dt.reshape(len(dt),1) @ step_err.reshape(1,len(step))   
+            result_count_err_rate_bkg = dt.reshape(len(dt),1) * step_err.reshape(1,len(step))   
 
             result_count_err_rate_full_corr_bkg = counts_err_bkg / livefrac_bkg
             result_count_err_rate_det_corr_bkg =result_count_err_rate_full_corr_bkg[:, det_indices, :, :]
             result_count_err_rate_det_corr_pix_bkg =result_count_err_rate_det_corr_bkg[:, :, pix_indices, :]
             result_count_err_rate_bkg_corr = np.sqrt(((result_count_err_rate_det_corr_pix_bkg**2).sum(axis=(1,2)) ) )
             step_err_corr = np.sqrt((result_count_err_rate_bkg_corr**2).sum(axis=0)) / dt_bkg.mean()
-            result_count_err_rate_bkg_corr = dt.reshape(len(dt),1) @ step_err_corr.reshape(1,len(step)) 
+            result_count_err_rate_bkg_corr = dt.reshape(len(dt),1) * step_err_corr.reshape(1,len(step)) 
 
             spec_in_corr = result_count_rate_corr - result_count_rate_corr_bkg
             spec_in = result_count_rate - result_count_rate_bkg
 
             spec_in_corr_err = np.sqrt(result_count_err_rate**2 + result_count_err_rate_bkg**2) 
+
+            spec_in_corr_lvt = result_count_rate_corr
+            spec_in_lvt = result_count_rate
+            spec_in_corr_err_lvt= result_count_err_rate
 
             if energies['e_low'][0].value == 0:
 
@@ -1231,6 +1251,11 @@ class ScienceData(L1Product):
             spec_in = result_count_rate
             spec_in_corr_err= result_count_err_rate
 
+            spec_in_corr_lvt = result_count_rate_corr
+            spec_in_lvt = result_count_rate
+            spec_in_corr_err_lvt= result_count_err_rate
+
+
             if energies['e_low'][0].value == 0:
 
                 spec_in = spec_in[:,1:]
@@ -1240,9 +1265,12 @@ class ScienceData(L1Product):
         
         t_diff = t_diff[:,det_indices].mean(axis=1).squeeze()
 
-        # eff_livefrac = result_count_rate.sum(axis=(1))  / result_count_rate_corr.sum(axis=(1)) 
+        # eff_livefrac = result_count_rate.sum(axis=(1))  / result_count_rate_corr.sum(axis=(1))
+        #  
 
-        eff_livefrac = spec_in.sum(axis=(1))  / spec_in_corr.sum(axis=(1)) 
+        eff_livefrac = spec_in_lvt.sum(axis=(1))  / spec_in_corr_lvt.sum(axis=(1)) 
+
+        # eff_livefrac = spec_in.sum(axis=(1)
 
         spec_in_final = spec_in_corr * eff_livefrac[:,None]
         spec_in_corr_err_final = spec_in_corr_err * eff_livefrac[:,None]
