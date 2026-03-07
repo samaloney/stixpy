@@ -1364,13 +1364,43 @@ class ScienceData(L1Product):
 
         meta = NDMeta()
 
+        # meta.add("exposure_time", np.sum(t_norm))
+        # meta.add("geo_area", srm_dict['geo_area'])
+        # meta.add("date-obs",  data_dict['times'])
+        # meta.add("angle",flare_angle)
+        # meta.add("distance",distance)
+        # meta.add("srm",srm_dict['srm'])
+        # meta.add("ph_axis",srm_dict['ph_axis'])
+
+        # spec_1d = Spectrum(data=counts_final,uncertainty=counts_uncertainity_pu, spectral_axis=counts_spectral_axis, meta=meta)
+
+        # return spec_1d
+    
+
+        srm = srm_dict['srm']
+        ph_ax_mids = srm_dict['ph_axis'][:-1] + 0.5*np.diff(srm_dict['ph_axis'])
+
+        index = np.where(ph_ax_mids <= 3.7)[0]
+
+        srm_trim = srm[index[-1]:]
+
+        ph_ax_bins = np.column_stack((srm_dict['ph_axis'][:-1], srm_dict['ph_axis'][1:]))
+
+        ph_ax_bins_trim = ph_ax_bins[index[-1]:]
+
+        ph_energies_trim = np.concatenate([ph_ax_bins_trim[:,0], ph_ax_bins_trim[:,1][-1:]])
+        # return srm_trim, ph_energies_trim
+
+        print(ph_ax_bins_trim)
+
+
         meta.add("exposure_time", np.sum(t_norm))
         meta.add("geo_area", srm_dict['geo_area'])
         meta.add("date-obs",  data_dict['times'])
-        meta.add("angle",flare_angle)
+        meta.add("angle",flare_angle*u.deg)
         meta.add("distance",distance)
-        meta.add("srm",srm_dict['srm'])
-        meta.add("ph_axis",srm_dict['ph_axis'])
+        meta.add("srm",srm_trim)
+        meta.add("ph_axis",ph_energies_trim*u.keV)
 
         spec_1d = Spectrum(data=counts_final,uncertainty=counts_uncertainity_pu, spectral_axis=counts_spectral_axis, meta=meta)
 
