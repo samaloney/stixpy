@@ -1349,7 +1349,20 @@ class ScienceData(L1Product):
             counts_final = counts[inds].sum(axis=0)
             counts_uncertainity_final = np.sqrt((counts_uncertainity[inds]**2).sum(axis=0))
 
-            counts_uncertainity_pu = PoissonUncertainty(counts_uncertainity_final)
+            e_low = data_dict['energies']['e_low'].value
+            energy_conditions = [e_low < 7, (e_low < 10) & (e_low >= 7), e_low>= 10]
+            percentage = [0.07, 0.05, 0.03]
+
+            systematic_err_percentage = np.select(energy_conditions, percentage)
+
+            print(systematic_err_percentage)
+
+            # Calculating systematic error
+            systematic_err = systematic_err_percentage * counts_final
+
+            counts_err_final_final = np.sqrt(counts_uncertainity_final**2 + systematic_err**2)            
+
+            counts_uncertainity_pu = PoissonUncertainty(counts_err_final_final)
             counts_spectral_axis = SpectralAxis(counts_axis, bin_specification='edges')
     
             t_norm = data_dict['time_bin'][inds] * data_dict['livefrac'][inds]
@@ -1375,9 +1388,10 @@ class ScienceData(L1Product):
         # spec_1d = Spectrum(data=counts_final,uncertainty=counts_uncertainity_pu, spectral_axis=counts_spectral_axis, meta=meta)
 
         # return spec_1d
-    
 
-        srm = srm_dict['srm']
+        ct_de = np.diff(counts_axis.value)
+
+        srm = srm_dict['srm'] * ct_de[None,:]
         ph_ax_mids = srm_dict['ph_axis'][:-1] + 0.5*np.diff(srm_dict['ph_axis'])
 
         index = np.where(ph_ax_mids <= 3.7)[0]
