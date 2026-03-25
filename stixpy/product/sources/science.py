@@ -227,7 +227,7 @@ class SpectrogramPlotMixin:
                     raise ValueError("Spectrogram plots can only one sum detector or summed over a number of detectors")
                 pid = pixel_indices
 
-        counts, errors, times, timedeltas, energies = self.get_data(
+        counts, errors, times, timedeltas,_, energies, _ = self.get_data(
             detector_indices=did, pixel_indices=pid, time_indices=time_indices, energy_indices=energy_indices
         )
         counts = counts.to(u.ct / u.s / u.keV)
@@ -324,7 +324,7 @@ class TimesSeriesPlotMixin:
         if pixel_indices == "all":
             pixel_indices = [[0, 11]]
 
-        counts, errors, times, timedeltas, energies = self.get_data(
+        counts, errors, times, timedeltas,_, energies,_ = self.get_data(
             detector_indices=detector_indices,
             pixel_indices=pixel_indices,
             time_indices=time_indices,
@@ -402,7 +402,7 @@ class PixelPlotMixin:
         else:
             fig, axes = plt.subplots(nrows=4, ncols=8, sharex=True, sharey=True, figsize=(7, 7))
 
-        counts, count_err, times, dt, energies = self.get_data(time_indices=time_indices, energy_indices=energy_indices)
+        counts, count_err, times, dt,_, energies,_ = self.get_data(time_indices=time_indices, energy_indices=energy_indices)
 
         imaging_mask = np.ones(32, bool)
         imaging_mask[8:10] = False
@@ -1415,6 +1415,7 @@ class ScienceData(L1Product):
         meta.add("distance",distance)
         meta.add("srm",srm_trim)
         meta.add("ph_axis",ph_energies_trim*u.keV)
+        meta.add("time_range",event_time_range)
 
         spec_1d = Spectrum(data=counts_final,uncertainty=counts_uncertainity_pu, spectral_axis=counts_spectral_axis, meta=meta)
 
