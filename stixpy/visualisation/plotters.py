@@ -117,13 +117,13 @@ class PixelPlotter:
         self.quadrant_font = {"weight": "regular", "size": 15}
 
         if cmap is None:
-            self.clrmap = copy.copy(cm.get_cmap("viridis"))
+            self.clrmap = copy.copy(plt.colormaps["viridis"])
             self.clrmap.set_over("gray")
             self.clrmap.set_under("white")
             self.clrmap.set_bad("gray")
 
         elif isinstance(cmap, str):
-            self.clrmap = copy.copy(cm.get_cmap(cmap))
+            self.clrmap = copy.copy(plt.colormaps[cmap])
         else:
             self.clrmap = cmap
 
