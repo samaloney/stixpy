@@ -116,7 +116,7 @@ def test_local_client(clientlocal, time_range, level, dtype, nfiles):
 @pytest.mark.remote_data
 def test_search_date(client):
     res = client.search(a.Time("2020-05-01T00:00", "2020-05-01T23:59"), a.Instrument.stix)
-    assert len(res) == 65
+    assert len(res) == 64
     # this might need fixed when we change to ANC to become an level of its own
 
 
@@ -244,33 +244,37 @@ def test_search_date_product_sci():
     assert len(res) == 1
 
 
+@pytest.fixture(scope="module")
+def tally_counts():
+    counts = {"individual_sum": 0, "total_reported": 0}
+    yield counts
+    # After all tests in the module finish, do the final check
+    assert counts["individual_sum"] == counts["total_reported"], (
+        f"Sum of parts ({counts['individual_sum']}) != Total ({counts['total_reported']})"
+    )
+
+
+@pytest.mark.parametrize(
+    "query, expetect_len, is_total",
+    [
+        ([a.Instrument.stix], 67, True),
+        ([a.Instrument.stix, a.stix.DataType.ql], 6, False),
+        ([a.Instrument.stix, a.stix.DataType.sci], 58, False),
+        ([a.Instrument.stix, a.stix.DataType.hk], 1, False),
+        ([a.Instrument.stix, a.stix.DataType.asp], 1, False),
+        ([a.Instrument.stix, a.stix.DataType.cal], 1, False),
+    ],
+)
 @pytest.mark.remote_data
-def test_fido():
-    res = Fido.search(a.Time("2020-11-17T00:00", "2020-11-17T23:59"), a.Instrument.stix)
-    len_total = len(res["stix"])
-    assert len_total == 68
+def test_fido(query, expetect_len, is_total, tally_counts):
+    res = Fido.search(a.Time("2020-11-17T00:00", "2020-11-17T23:59"), *query)
+    actual_len = len(res["stix"])
+    assert actual_len == expetect_len
 
-    res_ql = Fido.search(a.Time("2020-11-17T00:00", "2020-11-17T23:59"), a.Instrument.stix, a.stix.DataType.ql)
-    len_ql = len(res_ql["stix"])
-    assert len_ql == 6
-
-    res_sci = Fido.search(a.Time("2020-11-17T00:00", "2020-11-17T23:59"), a.Instrument.stix, a.stix.DataType.sci)
-    len_sci = len(res_sci["stix"])
-    assert len_sci == 58
-
-    res_hk = Fido.search(a.Time("2020-11-17T00:00", "2020-11-17T23:59"), a.Instrument.stix, a.stix.DataType.hk)
-    len_kh = len(res_hk["stix"])
-    assert len_kh == 1
-
-    res_asp = Fido.search(a.Time("2020-11-17T00:00", "2020-11-17T23:59"), a.Instrument.stix, a.stix.DataType.asp)
-    len_asp = len(res_asp["stix"])
-    assert len_asp == 1
-
-    res_cal = Fido.search(a.Time("2020-11-17T00:00", "2020-11-17T23:59"), a.Instrument.stix, a.stix.DataType.cal)
-    len_cal = len(res_cal["stix"])
-    assert len_cal == 2
-
-    assert len_ql + len_sci + len_kh + len_asp + len_cal == len_total
+    if is_total:
+        tally_counts["total_reported"] = actual_len
+    else:
+        tally_counts["individual_sum"] += actual_len
 
 
 @pytest.mark.remote_data

@@ -63,7 +63,7 @@ def test_get_hpc_info_interp():
 @pytest.mark.remote_data
 def test_stx_to_hpc_times():
     times = Time("2023-01-01") + np.arange(10) * u.min
-    stix_coord = SkyCoord([0] * 10 * u.deg, [0] * 10 * u.deg, frame=STIXImaging(obstime=times))
+    stix_coord = SkyCoord([0] * 10 * u.deg, [0] * 10 * u.deg, obstime=times, frame=STIXImaging)
     hp = stix_coord.transform_to(Helioprojective(obstime=times))
     stix_coord_rt = hp.transform_to(STIXImaging(obstime=times))
     assert_quantity_allclose(0 * u.deg, stix_coord.separation(stix_coord_rt), atol=1e-17 * u.deg)

@@ -206,8 +206,9 @@ def test_calibrate_visibility(flare_cpd):
         no_shadowing=True,
     )
     vis = create_visibility(meta_pixels)
-    time_centre = time_range[0] + np.diff(time_range) / 2
+    time_centre = time_range[0] + (time_range[1] - time_range[0]) / 2
     obs = HeliographicStonyhurst(0 * u.deg, 0 * u.deg, 1 * u.AU, obstime=time_centre)
     coord = SkyCoord(0 * u.deg, 0 * u.deg, frame=Helioprojective(obstime=time_centre, observer=obs))
     cal_vis = calibrate_visibility(vis, flare_location=coord)
-    assert_quantity_allclose(cal_vis.meta["offset"].data.xyz, coord.transform_to(STIXImaging).data.xyz)
+    res = coord.transform_to(STIXImaging).data.xyz
+    assert_quantity_allclose(cal_vis.meta["offset"].data.xyz, res)
