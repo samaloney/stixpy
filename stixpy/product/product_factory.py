@@ -1,10 +1,12 @@
 import pathlib
 from urllib.request import Request
 
-import astropy.io.fits
 import numpy as np
+
+import astropy.io.fits
 from astropy.io import fits
 from astropy.table import QTable
+
 from sunpy.data import cache
 from sunpy.util import expand_list
 from sunpy.util.datatype_factory_base import (

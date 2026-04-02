@@ -41,11 +41,12 @@ classifiers = [
 tests = [
     "matplotlib>=3.8.0",
     "pytest-astropy>=0.11.0",
-    "pytest-mpl>=0.16",
+    "pytest-mpl>=0.18",
     "pytest-xdist>=3.0.2",
-    "pytest>=7.1.0"
+    "pytest>=7.4.0"
 ]
 docs = [
+    "matplotlib>=3.8.0",
     "sphinx>=6.0.0",
     "sphinx-automodapi>=0.14.1",
     "packaging>=23.0",
@@ -82,61 +83,62 @@ stixpy = ["data/*", "net/tests/data/**/*"]
 [tool.setuptools_scm]
 version_file = "stixpy/_version.py"
 
-[ tool.gilesbot ]
+[tool.gilesbot]
+  [tool.gilesbot.pull_requests]
+  enabled = true
 
-  [ tool.gilesbot.pull_requests ]
-    enabled = true
+  [tool.gilesbot.towncrier_changelog]
+  enabled = true
+  verify_pr_number = true
+  changelog_skip_label = "No Changelog Entry Needed"
+  help_url = "https://github.com/TCDSolar/stixpy/blob/main/changelog/README.rst"
 
-  [ tool.gilesbot.towncrier_changelog ]
-    enabled = true
-    verify_pr_number = true
-    changelog_skip_label = "No Changelog Entry Needed"
-    help_url = "https://github.com/TCDSolar/stixpy/blob/main/changelog/README.rst"
+  changelog_missing_long = "There isn't a changelog file in this pull request. Please add a changelog file to the `changelog/` directory following the instructions in the changelog [README](https://github.com/TCDSolar/stixpy/blob/main/changelog/README.rst)."
 
-    changelog_missing_long = "There isn't a changelog file in this pull request. Please add a changelog file to the `changelog/` directory following the instructions in the changelog [README](https://github.com/TCDSolar/stixpy/blob/main/changelog/README.rst)."
+  type_incorrect_long = "The changelog file you added is not one of the allowed types. Please use one of the types described in the changelog [README](https://github.com/TCDSolar/stixpy/blob/main/changelog/README.rst)"
 
-    type_incorrect_long = "The changelog file you added is not one of the allowed types. Please use one of the types described in the changelog [README](https://github.com/TCDSolar/stixpy/blob/main/changelog/README.rst)"
+  number_incorrect_long = "The number in the changelog file you added does not match the number of this pull request. Please rename the file."
 
-    number_incorrect_long = "The number in the changelog file you added does not match the number of this pull request. Please rename the file."
-
-
+# TODO: This should be in towncrier.toml but Giles currently only works looks in
+# pyproject.toml we should move this back when it's fixed.
 [tool.towncrier]
-    package = "stixpy"
-    filename = "CHANGELOG.rst"
-    directory = "changelog/"
-    issue_format = "`#{issue} <https://github.com/TCDSolar/stixpy/pull/{issue}>`__"
+  package = "stixpy"
+  filename = "CHANGELOG.rst"
+  directory = "changelog/"
+  issue_format = "`#{issue} <https://github.com/TCDSolar/stixpy/pull/{issue}>`__"
+  title_format = "{version} ({project_date})"
 
-    [[tool.towncrier.type]]
-        directory = "breaking"
-        name = "Backwards Incompatible Changes"
-        showcontent = true
+  [[tool.towncrier.type]]
+  directory = "breaking"
+  name = "Breaking Changes"
+  showcontent = true
 
-    [[tool.towncrier.type]]
-        directory = "api"
-        name = "API Changes"
-        showcontent = true
+  [[tool.towncrier.type]]
+  directory = "deprecation"
+  name = "Deprecations"
+  showcontent = true
 
-    [[tool.towncrier.type]]
-      directory = "removal"
-      name = "Deprecations and Removals"
-      showcontent = true
+  [[tool.towncrier.type]]
+  directory = "removal"
+  name = "Removals"
+  showcontent = true
 
-    [[tool.towncrier.type]]
-      directory = "feature"
-      name = "Features"
-      showcontent = true
+  [[tool.towncrier.type]]
+  directory = "feature"
+  name = "New Features"
+  showcontent = true
 
-    [[tool.towncrier.type]]
-      directory = "bugfix"
-      name = "Bug Fixes"
-      showcontent = true
+  [[tool.towncrier.type]]
+  directory = "bugfix"
+  name = "Bug Fixes"
+  showcontent = true
 
-    [[tool.towncrier.type]]
-      directory = "doc"
-      name = "Improved Documentation"
-      showcontent = true
+  [[tool.towncrier.type]]
+  directory = "doc"
+  name = "Documentation"
+  showcontent = true
 
-    [[tool.towncrier.type]]
-      directory = "trivial"
-      name = "Trivial/Internal Changes"
-      showcontent = true
+  [[tool.towncrier.type]]
+  directory = "trivial"
+  name = "Internal Changes"
+  showcontent = true

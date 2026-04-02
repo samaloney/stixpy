@@ -1,9 +1,10 @@
 from pathlib import Path
 from unittest import mock
 
+from numpy.testing import assert_equal
+
 import astropy.units as u
 from astropy.table import Table
-from numpy.testing import assert_equal
 
 from stixpy.io.readers import read_elut, read_elut_index, read_sci_energy_channels
 

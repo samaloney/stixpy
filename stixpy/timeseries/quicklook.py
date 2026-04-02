@@ -7,6 +7,7 @@ from astropy.io.fits import BinTableHDU, Header
 from astropy.io.fits.connect import read_table_fits
 from astropy.table import QTable
 from astropy.time.core import Time, TimeDelta
+
 from sunpy.timeseries.timeseriesbase import GenericTimeSeries
 
 from stixpy.calibration.livetime import get_livetime_fraction

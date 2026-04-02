@@ -1,6 +1,8 @@
-import astropy.units as u
 import numpy as np
+
+import astropy.units as u
 from astropy.time import Time
+
 from sunpy.net import attrs as a
 from sunpy.net.attr import SimpleAttr
 from sunpy.net.dataretriever import GenericClient

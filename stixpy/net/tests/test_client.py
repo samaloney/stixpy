@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+
 import sunpy
 from sunpy.net import Fido
 from sunpy.net import attrs as a

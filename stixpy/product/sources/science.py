@@ -1,15 +1,17 @@
 from pathlib import Path
 from itertools import product
 
-import astropy.units as u
 import numpy as np
-from astropy.table import QTable, vstack
-from astropy.time import Time
-from astropy.visualization import quantity_support
 from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
 from matplotlib.dates import ConciseDateFormatter, DateFormatter, HourLocator
 from matplotlib.widgets import Slider
+
+import astropy.units as u
+from astropy.table import QTable, vstack
+from astropy.time import Time
+from astropy.visualization import quantity_support
+
 from sunpy.time.timerange import TimeRange
 from sunpy.util import deprecated
 

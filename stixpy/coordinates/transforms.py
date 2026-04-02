@@ -1,14 +1,16 @@
 import warnings
 from functools import lru_cache
 
+import numpy as np
+
 import astropy.coordinates as coord
 import astropy.units as u
-import numpy as np
 from astropy.coordinates import frame_transform_graph
 from astropy.coordinates.matrix_utilities import matrix_transpose, rotation_matrix
 from astropy.io import fits
 from astropy.table import QTable, vstack
 from astropy.time import Time
+
 from sunpy.coordinates import HeliographicStonyhurst, Helioprojective
 from sunpy.net import Fido
 from sunpy.net import attrs as a
@@ -201,6 +203,7 @@ def _get_ephemeris_data(start_time, end_time=None):
         aux["time"] = (
             date_beg + aux["time"] - 32 * u.s
         )  # Shift AUX data by half a time bin (starting time vs. bin centre)
+        [aux.meta.pop(key) for key in ["CHECKSUM", "DATASUM"]]
         aux_data.append(aux)
 
     aux = vstack(aux_data)

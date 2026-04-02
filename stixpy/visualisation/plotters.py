@@ -2,13 +2,14 @@ import copy
 from pathlib import Path
 from collections import defaultdict
 
-import astropy.units as u
 import numpy as np
 from matplotlib import cm
 from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm, Normalize
 from matplotlib.patches import Circle, Patch
 from matplotlib.widgets import Slider
+
+import astropy.units as u
 
 from stixpy.io.readers import read_subc_params
 

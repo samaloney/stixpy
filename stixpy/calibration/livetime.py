@@ -59,8 +59,9 @@ References
 STIX-TN-0015-ETH_I1R0_Caliste_Rates
 """
 
-import astropy.units as u
 import numpy as np
+
+import astropy.units as u
 
 __all__ = ["pileup_correction_factor", "get_livetime_fraction"]
 

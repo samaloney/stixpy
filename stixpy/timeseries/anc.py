@@ -1,12 +1,14 @@
 from collections import OrderedDict
 
-import astropy.units as u
 import numpy as np
+
+import astropy.units as u
 from astropy.io import fits
 from astropy.io.fits import BinTableHDU, Header
 from astropy.io.fits.connect import read_table_fits
 from astropy.table import QTable
 from astropy.time.core import Time, TimeDelta
+
 from sunpy.timeseries.timeseriesbase import GenericTimeSeries
 
 __all__ = [

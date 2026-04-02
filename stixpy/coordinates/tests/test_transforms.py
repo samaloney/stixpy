@@ -1,11 +1,13 @@
 from unittest import mock
 
-import astropy.units as u
 import numpy as np
 import pytest
+
+import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.tests.helper import assert_quantity_allclose
 from astropy.time import Time
+
 from sunpy.coordinates import HeliographicStonyhurst, Helioprojective
 
 from stixpy.coordinates.frames import STIXImaging

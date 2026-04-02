@@ -1,11 +1,12 @@
 from pathlib import Path
 from datetime import datetime
 
-import astropy.units as u
 import numpy as np
-from astropy.table import QTable, Table
 from dateutil.parser import parse
 from intervaltree import IntervalTree
+
+import astropy.units as u
+from astropy.table import QTable, Table
 
 
 def read_energy_channel_index(echan_index_file):

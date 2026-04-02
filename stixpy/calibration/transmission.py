@@ -1,10 +1,11 @@
 from pathlib import Path
 from collections import OrderedDict
 
-import astropy.units as u
 import numpy as np
-from astropy.table.table import Table
 from roentgen.absorption.material import Material, Stack
+
+import astropy.units as u
+from astropy.table.table import Table
 
 from stixpy.io.readers import read_sci_energy_channels
 

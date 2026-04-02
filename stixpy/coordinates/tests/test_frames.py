@@ -1,8 +1,10 @@
-import astropy.units as u
 import numpy as np
 import pytest
+
+import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.wcs import WCS
+
 from sunpy.coordinates import get_horizons_coord
 from sunpy.coordinates.frames import HeliographicStonyhurst, Helioprojective
 from sunpy.map import Map, make_fitswcs_header
