@@ -33,7 +33,7 @@ jobs:
   core:
     uses: OpenAstronomy/github-actions-workflows/.github/workflows/tox.yml@v2  # zizmor: ignore[unpinned-uses]
     with:
-      submodules: false
+      submodules: true
       coverage: codecov
       toxdeps: tox-pypi-filter
       posargs: -n auto --color=yes
@@ -60,7 +60,7 @@ jobs:
     needs: [core, sdist_verify]
     uses: OpenAstronomy/github-actions-workflows/.github/workflows/tox.yml@v2  # zizmor: ignore[unpinned-uses]
     with:
-      submodules: false
+      submodules: true
       coverage: codecov
       toxdeps: tox-pypi-filter
       posargs: -n auto --color=yes
@@ -78,7 +78,7 @@ jobs:
     uses: OpenAstronomy/github-actions-workflows/.github/workflows/tox.yml@v2  # zizmor: ignore[unpinned-uses]
     with:
       default_python: '3.13'
-      submodules: false
+      submodules: true
       pytest: false
       toxdeps: tox-pypi-filter
       cache-path: |
@@ -107,7 +107,7 @@ jobs:
       python-version: '3.13'
       test_extras: 'tests'
       test_command: 'pytest -p no:warnings --doctest-rst --pyargs stixpy'
-      submodules: false
+      submodules: true
       save_artifacts: true
       upload_to_pypi: false
 
