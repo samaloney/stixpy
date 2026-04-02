@@ -17,8 +17,8 @@ authors = [{name="Shane Maloney", email = "shane.maloney@dias.ie"}]
 dependencies = [
     "sunpy[map,net,timeseries]>=7.0",
     "packaging>=23.2",
-    "intervaltree",
-    "roentgen<=2.4",
+    "intervaltree>=3.0.2",
+    "roentgen>=2.2.0,<=2.4",
     "matplotlib>=3.8.0",
     "xrayvisim~=0.2.1"
 ]
@@ -77,7 +77,7 @@ include = ["stixpy*"]
 exclude = ["stixpy._dev*"]
 
 [tool.setuptools.package-data]
-xrayvisim = ["data/*"]
+stixpy = ["data/*", "net/tests/data/**/*"]
 
 [tool.setuptools_scm]
 version_file = "stixpy/_version.py"

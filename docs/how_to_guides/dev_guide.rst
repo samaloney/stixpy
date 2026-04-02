@@ -37,8 +37,8 @@ available to help manage and create isolated environment such as
 * Python 3.6+ inbuilt venv.
 
 For this documentation we will proceed using Python's venv but the step would be similar in other
-tools. For a more detailed overview see the virturl environment section of astropy development
-workflow `here <https://docs.astropy.org/en/stable/development/workflow/virtual_pythons.html#virtual-envs>`_.
+tools. For a more detailed overview see the isolated environment section of astropy development
+workflow `here <https://docs.astropy.org/en/latest/development/quickstart.html#create-an-isolated-development-environment>`_.
 
 
 

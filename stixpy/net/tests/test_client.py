@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+import sunpy
 from sunpy.net import Fido
 from sunpy.net import attrs as a
 
@@ -85,6 +86,7 @@ def test_client(urlopen, client, http_response, time_range, nfiles):
     assert len(query) == nfiles
 
 
+@pytest.mark.skipif(sunpy.__version__ < "7.1.0", reason="Bug fix not backported")
 @pytest.mark.skipif(os.name == "nt", reason="Upstream sunpy bug on windows")
 @pytest.mark.parametrize(
     "time_range, level, dtype, nfiles",
@@ -120,6 +122,7 @@ def test_search_date(client):
     # this might need fixed when we change to ANC to become an level of its own
 
 
+@pytest.mark.skipif(sunpy.__version__ < "7.1.0", reason="Bug fix not backported")
 @pytest.mark.skipif(os.name == "nt", reason="Upstream sunpy bug on windows")
 def test_search_max_version(clientlocal):
     res = clientlocal.search(a.Time("2022-01-01T00:00", "2022-01-01T23:59"), a.Instrument.stix, a.stix.MaxVersion(3))
@@ -133,6 +136,7 @@ def test_search_max_version(clientlocal):
     assert len(res) == 8
 
 
+@pytest.mark.skipif(sunpy.__version__ < "7.1.0", reason="Bug fix not backported")
 @pytest.mark.skipif(os.name == "nt", reason="Upstream sunpy bug on windows")
 def test_search_min_version(clientlocal):
     res = clientlocal.search(a.Time("2022-01-01T00:00", "2022-01-01T23:59"), a.Instrument.stix, a.stix.MinVersion(2))
@@ -146,6 +150,7 @@ def test_search_min_version(clientlocal):
     assert len(res) == 8
 
 
+@pytest.mark.skipif(sunpy.__version__ < "7.1.0", reason="Bug fix not backported")
 @pytest.mark.skipif(os.name == "nt", reason="Upstream sunpy bug on windows")
 def test_search_version(clientlocal):
     res = clientlocal.search(a.Time("2022-01-01T00:00", "2022-01-01T23:59"), a.Instrument.stix, a.stix.Version(2))
@@ -159,6 +164,7 @@ def test_search_version(clientlocal):
     assert len(res) == 3
 
 
+@pytest.mark.skipif(sunpy.__version__ < "7.1.0", reason="Bug fix not backported")
 @pytest.mark.skipif(os.name == "nt", reason="Upstream sunpy bug on windows")
 def test_search_version_and(clientlocal):
     res = clientlocal.search(
@@ -167,6 +173,7 @@ def test_search_version_and(clientlocal):
     assert len(res) == 6
 
 
+@pytest.mark.skipif(sunpy.__version__ < "7.1.0", reason="Bug fix not backported")
 @pytest.mark.skipif(os.name == "nt", reason="Upstream sunpy bug on windows")
 def test_search_latest_version_empty(clientlocal):
     res = clientlocal.search(a.Time("2023-01-01T00:00", "2023-01-01T23:59"), a.Instrument.stix)
@@ -174,6 +181,7 @@ def test_search_latest_version_empty(clientlocal):
     assert len(res) == 0
 
 
+@pytest.mark.skipif(sunpy.__version__ < "7.1.0", reason="Bug fix not backported")
 @pytest.mark.skipif(os.name == "nt", reason="Upstream but on windows")
 def test_search_latest_version(clientlocal):
     res = clientlocal.search(a.Time("2022-01-01T00:00", "2022-01-01T23:59"), a.Instrument.stix)
