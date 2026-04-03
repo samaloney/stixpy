@@ -32,6 +32,18 @@ copyright = f"{datetime.datetime.now().year}, {author}"  # noqa: A001
 
 # -- General configuration ---------------------------------------------------
 
+from docutils.parsers.rst import roles
+
+# Define it early so 'sphinx-autodoc-typehints' sees it immediately
+if "mpltype" not in roles._roles:
+    roles.register_local_role("mpltype", roles.generic_custom_role)
+
+# Optional: Add specific anchors or URLs to ignore if they remain flaky
+linkcheck_ignore = [
+    r"https://anaconda.org",
+    # r"https://github.com/.*#.*", # GitHub anchors are notoriously broken in linkcheck
+]
+
 # Wrap large function/method signatures
 maximum_signature_line_length = 80
 

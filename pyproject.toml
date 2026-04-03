@@ -54,7 +54,6 @@ docs = [
     "sphinx-design>=0.2.0",
     "sphinx-gallery>=0.13.0",
     "sphinxext-opengraph>=0.6.0",
-    "stixpy[all]",
     "pydata-sphinx-theme>=0.16.0"
 ]
 dev = ["stixpy[tests,docs]"]
