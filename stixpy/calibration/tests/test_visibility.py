@@ -1,10 +1,12 @@
-import astropy.units as u
 import numpy as np
 import pytest
+from numpy.ma.testutils import assert_equal
+
+import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.tests.helper import assert_quantity_allclose
 from astropy.time import Time
-from numpy.ma.testutils import assert_equal
+
 from sunpy.coordinates import HeliographicStonyhurst, Helioprojective
 from sunpy.time import TimeRange
 
@@ -51,6 +53,7 @@ def test_get_read_det_adc_mapping():
     ).all()
 
 
+@pytest.mark.remote_data
 @pytest.mark.parametrize(
     "pixel_set,expected_abcd_rate_kev,expected_abcd_rate_kev_cm0,expected_abcd_rate_kev_cm1,areas",
     [
@@ -157,6 +160,7 @@ def test_create_meta_pixels_timebins(flare_cpd):
     assert_quantity_allclose(np.sum(flare_cpd.durations[0:3]), meta_pixels["time_range"].dt.to(u.s))
 
 
+@pytest.mark.remote_data
 def test_create_meta_pixels_shadow(flare_cpd):
     energy_range = [6, 12] * u.keV
     time_range = [flare_cpd.times[0], flare_cpd.times[2]]

@@ -13,16 +13,18 @@ Imports
 
 import logging
 
-import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
-from astropy.coordinates import SkyCoord
-from sunpy.coordinates import HeliographicStonyhurst, Helioprojective
-from sunpy.map import Map, make_fitswcs_header
-from sunpy.time import TimeRange
 from xrayvision.clean import vis_clean
 from xrayvision.imaging import vis_to_image, vis_to_map
 from xrayvision.mem import mem, resistant_mean
+
+import astropy.units as u
+from astropy.coordinates import SkyCoord
+
+from sunpy.coordinates import HeliographicStonyhurst, Helioprojective
+from sunpy.map import Map, make_fitswcs_header
+from sunpy.time import TimeRange
 
 from stixpy.calibration.visibility import calibrate_visibility, create_meta_pixels, create_visibility
 from stixpy.coordinates.frames import STIXImaging

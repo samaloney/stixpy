@@ -1,7 +1,8 @@
-import astropy.units as u
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
+
+import astropy.units as u
 
 from stixpy.data import test
 from stixpy.product import Product

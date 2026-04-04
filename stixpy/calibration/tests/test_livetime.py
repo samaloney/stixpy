@@ -24,4 +24,5 @@ def test_get_livetime():
 
     assert np.allclose(ph_in, ph_out)
     assert np.allclose(ph_in, trig2 / livetime)
-    assert np.allclose((trig2 / trig1)[1:], two_photon[1:])
+    with np.errstate(invalid="ignore"):
+        assert np.allclose((trig2 / trig1)[1:], two_photon[1:])

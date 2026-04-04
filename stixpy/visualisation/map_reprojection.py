@@ -79,12 +79,14 @@ A HMI map
 
 """
 
-import astropy.units as u
 import matplotlib.pyplot as plt
-import sunpy
+from reproject import reproject_interp
+
+import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.wcs import WCS
-from reproject import reproject_interp
+
+import sunpy
 
 try:
     from stixcore.ephemeris.manager import Spice

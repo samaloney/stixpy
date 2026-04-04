@@ -4,8 +4,9 @@ Grid Calibration
 
 from pathlib import Path
 
-import astropy.units as u
 import numpy as np
+
+import astropy.units as u
 from astropy.table import Table
 
 __all__ = ["get_grid_transmission", "_calculate_grid_transmission"]

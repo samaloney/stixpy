@@ -1,15 +1,17 @@
 from types import SimpleNamespace
 from pathlib import Path
 
-import astropy.units as u
 import numpy as np
+from xrayvision.visibility import Visibilities, VisMeta
+
+import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.table import Table
 from astropy.time import Time
 from astropy.units import Quantity
+
 from sunpy.coordinates import HeliographicStonyhurst
 from sunpy.time import TimeRange
-from xrayvision.visibility import Visibilities, VisMeta
 
 from stixpy.calibration.energy import get_elut
 from stixpy.calibration.grid import get_grid_transmission

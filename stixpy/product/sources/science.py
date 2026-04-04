@@ -1,15 +1,17 @@
 from pathlib import Path
 from itertools import product
 
-import astropy.units as u
 import numpy as np
-from astropy.table import QTable, vstack
-from astropy.time import Time
-from astropy.visualization import quantity_support
 from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
 from matplotlib.dates import ConciseDateFormatter, DateFormatter, HourLocator
 from matplotlib.widgets import Slider
+
+import astropy.units as u
+from astropy.table import QTable, vstack
+from astropy.time import Time
+from astropy.visualization import quantity_support
+
 from sunpy.time.timerange import TimeRange
 from sunpy.util import deprecated
 
@@ -196,6 +198,9 @@ class SpectrogramPlotMixin:
         - 'cr': counts per second
         - 'dcr': counts per second per keV
         """
+        if axes is None:
+            fig, axes = plt.subplots()
+
         counts_shape = self.data["counts"].shape
         if len(counts_shape) != 4:
             # if spectrogram can't do anything with pixel or detector indices
@@ -244,11 +249,6 @@ class SpectrogramPlotMixin:
         t_edges = Time(
             np.concatenate([times - timedeltas.reshape(-1) / 2, times[-1] + timedeltas.reshape(-1)[-1:] / 2])
         )
-
-        if axes is None:
-            fig, axes = plt.subplots()
-        else:
-            fig = axes.get_figure()  # noqa
 
         pcolor_kwargs = {"norm": LogNorm(), "shading": "flat"}
         pcolor_kwargs.update(plot_kwargs)
@@ -327,8 +327,6 @@ class TimesSeriesPlotMixin:
         """
         if axes is None:
             fig, axes = plt.subplots()
-        else:
-            axes = axes.get_figure()
 
         if detector_indices == "all":
             detector_indices = [[0, 31]]

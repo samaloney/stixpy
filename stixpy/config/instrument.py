@@ -1,7 +1,8 @@
 from types import SimpleNamespace
 
-import astropy.units as u
 import numpy as np
+
+import astropy.units as u
 
 from stixpy.io.readers import read_det_adc_mapping, read_pixel_params, read_subc_params
 

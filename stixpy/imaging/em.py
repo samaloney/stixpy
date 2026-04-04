@@ -1,15 +1,17 @@
 from pathlib import Path
 from collections.abc import Sequence
 
-import astropy.units as apu
 import numpy as np
+from xrayvision.transform import generate_xy
+from xrayvision.visibility import Visibilities
+
+import astropy.units as apu
 from astropy.coordinates import SkyCoord
 from astropy.table.table import Table
 from astropy.units import Quantity
+
 from sunpy.coordinates import HeliographicStonyhurst
 from sunpy.time import TimeRange
-from xrayvision.transform import generate_xy
-from xrayvision.visibility import Visibilities
 
 from stixpy.coordinates.frames import STIXImaging
 from stixpy.coordinates.transforms import get_hpc_info

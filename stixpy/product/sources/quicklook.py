@@ -1,9 +1,11 @@
-import astropy.units as u
 import numpy as np
+from numpy.typing import NDArray
+
+import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 from astropy.units import Quantity
-from numpy.typing import NDArray
+
 from sunpy.time import TimeRange
 
 from stixpy.coordinates.frames import STIXImaging
