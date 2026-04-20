@@ -177,7 +177,7 @@ def create_meta_pixels(
     t_ind = np.argwhere(t_mask).ravel()
     e_ind = np.argwhere(e_mask).ravel()
 
-    print('e_ind = ', e_ind)
+    # print('e_ind = ', e_ind)
 
     time_range = TimeRange(
         pixel_data.times[t_ind[0]] - pixel_data.duration[t_ind[0]] / 2,
@@ -204,17 +204,17 @@ def create_meta_pixels(
 
     pixel_data.data["livefrac"] = livefrac
 
-    print('e_ind = ',e_ind)
+    # print('e_ind = ',e_ind)
 
     e_cor_high, e_cor_low = get_elut_correction(e_ind, pixel_data)
 
-    print('e_cor_high_shape = ',np.shape(e_cor_high))
-    print('counts shape = ',np.shape(pixel_data.data["counts"]))
+    # print('e_cor_high_shape = ',np.shape(e_cor_high))
+    # print('counts shape = ',np.shape(pixel_data.data["counts"]))
 
     # Get counts and other data.
     idx_pix = _PIXEL_SLICES.get(pixels.lower(), None)
 
-    print('pix = ',np.shape(e_cor_low[..., idx_pix]))
+    # print('pix = ',np.shape(e_cor_low[..., idx_pix]))
 
     if idx_pix is None:
         raise ValueError(f"Unrecognised input for 'pixels': {pixels}. Supported values: {list(_PIXEL_SLICES.keys())}")

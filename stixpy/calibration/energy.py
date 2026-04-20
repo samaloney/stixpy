@@ -39,8 +39,8 @@ def get_elut(date):
     elut_table = read_elut(elut_file, sci_channels)
 
 
-    print('science_channels = ',np.shape(sci_channels))
-    print('elut_table_channels = ',np.shape(elut_table))
+    # print('science_channels = ',np.shape(sci_channels))
+    # print('elut_table_channels = ',np.shape(elut_table))
 
     return elut_table
 

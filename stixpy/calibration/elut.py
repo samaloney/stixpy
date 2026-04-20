@@ -38,7 +38,7 @@ def get_elut(date):
     start_date, end_date, elut_file = list(elut_info)[0]
     sci_channels = get_sci_channels(date)
     
-    print('ELUT_FILENAME = ' , elut_file)
+    # print('ELUT_FILENAME = ' , elut_file)
 
     elut_table = read_elut(elut_file, sci_channels)
 
@@ -102,6 +102,6 @@ def get_elut_correction(e_ind, pixel_data):
     
 
     cor = bins / bins_actual
-    print('ELUT_COR = ',cor)    
+    # print('ELUT_COR = ',cor)    
 
     return e_cor_high, e_cor_low, cor

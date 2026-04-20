@@ -59,7 +59,7 @@ def get_grid_transmission(ph_energy, flare_location: STIXImaging):
 
     muvals = xraydb.material_mu('W', ph_energy * 1e3, density=19.30, kind='total') / 10 # in units of mm^-1
     L = 1 / muvals
-    print('L  = ', L)
+    # print('L  = ', L)
     # trans = np.exp(-0.4 / L)
     subc_transm=L
 
@@ -71,12 +71,12 @@ def get_grid_transmission(ph_energy, flare_location: STIXImaging):
     #                                  20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]
     idx_full = det_indices_top24
     idx = [i for i,x in enumerate(sc-1) if x in  det_indices_top24]
-    print('idx = ', idx)
-    print('lenidx = ',len(idx))
+    # print('idx = ', idx)
+    # print('lenidx = ',len(idx))
     # idx = det_all
 
-    # for i,idx in enumerate(idx_full):
-    print(grid_orient_front_all)
+    # # for i,idx in enumerate(idx_full):
+    # print(grid_orient_front_all)
 
     grid_orient_front = grid_orient_front_all[idx]
     pitch_front = pitch_front_all[idx]
@@ -91,7 +91,7 @@ def get_grid_transmission(ph_energy, flare_location: STIXImaging):
 
     flare_loc_deg = flare_location / 3600  #. ;; Convert coordinates to deg
     theta = flare_loc_deg[0] * np.cos(np.deg2rad(grid_orient_avg)) + flare_loc_deg[1] * np.sin(np.deg2rad(grid_orient_avg)) 
-    print('THETA = ', theta)
+    # print('THETA = ', theta)
     
 # ;;------ Subcollimator tranmsission at low energies
 # idx = np.where(subc_n_all eq (subc_n+1))
@@ -124,7 +124,7 @@ def get_grid_transmission(ph_energy, flare_location: STIXImaging):
     # idx = np.argwhere(np.isin(sc, finest_scs, invert=True)).ravel()
     # final_transmission[sc[idx] - 1] = total_transmission[idx]
    
-    print('subc = ',subc_transm)
+    # print('subc = ',subc_transm)
     return subc_transm
 
 
@@ -141,31 +141,31 @@ def stx_grid_transmission(pitch, slit, thickness, L):
     H_rep = thickness.reshape(1, len(thickness))
     L_rep = L.reshape(len(L), 1)
 
-    print('slit = ',slit[0])
-    print('pitch = ',pitch[0])
-    print('h_rep = ',thickness[0])
+    # print('slit = ',slit[0])
+    # print('pitch = ',pitch[0])
+    # print('h_rep = ',thickness[0])
 
     # slit_rep = np.tile(slit, (n_energies, 1))
     # pitch_rep = np.tile(pitch, (n_energies, 1))
     # H_rep = np.tile(thickness, (n_energies, 1))
     # L_rep = np.tile(L, (n_subc, 1)).T
   
-    print(np.shape(slit_rep))
-    print(np.shape(pitch_rep))
-    print(np.shape(H_rep))
-    print(np.shape(L_rep))
+    # print(np.shape(slit_rep))
+    # print(np.shape(pitch_rep))
+    # print(np.shape(H_rep))
+    # print(np.shape(L_rep))
 
     # ;; Transmission for a wedge shape model for grid imperfections
     g0 = slit_rep / pitch_rep + (pitch_rep - slit_rep) / pitch_rep * np.exp( - H_rep / L_rep )
     ttt = L_rep / dh * ( 1. - np.exp(- dh / L_rep ) )
     g1 = 2. * ds / pitch_rep * (ttt - np.exp( - H_rep / L_rep ))
     
-    print('g0 = ',g0[:,0])
-    print('g1 = ',g1[:,0])
+    # print('g0 = ',g0[:,0])
+    # print('g1 = ',g1[:,0])
 
     g_transmission = g0 + g1
 
-    print('transmission = ',g_transmission)
+    # print('transmission = ',g_transmission)
   
     return g_transmission
 

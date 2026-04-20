@@ -963,7 +963,7 @@ class ScienceData(L1Product):
 
             _, _, elut_cor_fac = get_elut_correction(np.array(self.energies['channel']), self)
 
-            print('elut_corr_fac = ', elut_cor_fac)
+            # print('elut_corr_fac = ', elut_cor_fac)
             e_norm_energies = e_norm
             e_norm = e_norm / elut_cor_fac
         
@@ -1179,10 +1179,10 @@ class ScienceData(L1Product):
                 return_indices=True
             )
 
-            print('ind_sub = ',indices_sub)
-            print('e = ',energies['e_low'])
-            print('ebkg = ',energies_bkg['e_low']) 
-            print('ebkg_ind = ',energies_bkg['e_low'][indices_sub])       
+            # print('ind_sub = ',indices_sub)
+            # print('e = ',energies['e_low'])
+            # print('ebkg = ',energies_bkg['e_low']) 
+            # print('ebkg_ind = ',energies_bkg['e_low'][indices_sub])       
 
             rate_bkg = rate_bkg[:,:,:,indices_sub] * elut_cor_fac
             rate_err_bkg = rate_err_bkg[:,:,:,indices_sub]* elut_cor_fac
@@ -1194,8 +1194,8 @@ class ScienceData(L1Product):
             # dt = dt.squeeze().mean(axis=1)
             dt_bkg = dt_bkg.squeeze()
 
-            print('dt_bkg =',dt_bkg.shape)
-            print('dt_shape =',dt.shape)
+            # print('dt_bkg =',dt_bkg.shape)
+            # print('dt_shape =',dt.shape)
             # result_count_rate_full_bkg  = (counts_bkg /  dt_bkg) * dt
             result_count_rate_full_bkg  = counts_bkg
             result_count_rate_det_bkg  = result_count_rate_full_bkg[:, det_indices, :, :]
@@ -1332,12 +1332,12 @@ class ScienceData(L1Product):
  
             counts = data_dict['rate']
 
-            print('ct_check_prev = ',len(counts[counts<0]))
+            # print('ct_check_prev = ',len(counts[counts<0]))
 
             counts[np.nonzero(counts < 0)] = 0
 
-            print('ct_shape = ',counts.shape)
-            print('ct_check_post = ',len(counts[counts<0]))
+            # print('ct_shape = ',counts.shape)
+            # print('ct_check_post = ',len(counts[counts<0]))
 
             counts_uncertainity = data_dict['rate_err'] 
 
@@ -1355,7 +1355,7 @@ class ScienceData(L1Product):
 
             systematic_err_percentage = np.select(energy_conditions, percentage)
 
-            print(systematic_err_percentage)
+            # print(systematic_err_percentage)
 
             # Calculating systematic error
             systematic_err = systematic_err_percentage * counts_final
@@ -1405,7 +1405,7 @@ class ScienceData(L1Product):
         ph_energies_trim = np.concatenate([ph_ax_bins_trim[:,0], ph_ax_bins_trim[:,1][-1:]])
         # return srm_trim, ph_energies_trim
 
-        print(ph_ax_bins_trim)
+        # print(ph_ax_bins_trim)
 
 
         meta.add("exposure_time", np.sum(t_norm))
@@ -1452,10 +1452,10 @@ class ScienceData(L1Product):
         # print(energies)
         # print(bkg_energies)
 
-        print('e_bkg = ',bkg_energies)
+        # print('e_bkg = ',bkg_energies)
 
-        print('e_dat = ',energies)
-        print('in_sub = ',indices_sub)
+        # print('e_dat = ',energies)
+        # print('in_sub = ',indices_sub)
 
         bkg_rate_sub = bkg_rate[:,indices_sub]
         bkg_rate_err_sub = bkg_rate_err[:,indices_sub]
@@ -1478,7 +1478,7 @@ class ScienceData(L1Product):
     def get_masked_srm(self,flare_location):
 
         PATH_DRM = '/home/jmitchell/software/stixpy-dev/stixpy/config/data/detector/'
-        drm = np.load(PATH_DRM+'stx_drm_energy.npy')
+        drm = np.load(PATH_DRM+'stx_drm_energy.npz')["data"]
         ph_energies = np.load(PATH_DRM+'stx_ph_edges.npy')
         ct_energies = np.load(PATH_DRM+'stx_ct_edges.npy')
         
