@@ -1,4 +1,6 @@
+import warnings
 from pathlib import Path
+from functools import cached_property
 from itertools import product
 
 import numpy as np
@@ -15,6 +17,8 @@ from astropy.visualization import quantity_support
 from sunpy.time.timerange import TimeRange
 from sunpy.util import deprecated
 
+from stixpy.calibration.livetime import get_livetime_fraction
+from stixpy.config.instrument import STIX_INSTRUMENT
 from stixpy.io.readers import read_subc_params
 from stixpy.product.product import L1Product
 
@@ -436,6 +440,14 @@ class ScienceData(L1Product):
         return self._energies
 
     @property
+    def time(self):
+        """
+        An `astropy.time.Time` array representing the center of the observed time bins.
+        """
+        return self.data["time"]
+
+    @property
+    @deprecated(name="times", since="0.2", message="Use `time` instead", warning_type=DeprecationWarning)
     def times(self):
         """
         An `astropy.time.Time` array representing the center of the observed time bins.
@@ -457,6 +469,67 @@ class ScienceData(L1Product):
         """
         return self.data["timedel"]
 
+    @cached_property
+    def livetime_fraction(self):
+        """
+        Livetime fraction
+        """
+        if self.data["triggers"].ndim == 1:
+            triggers = self.data["triggers"].reshape(-1, 1).astype(float)
+        else:
+            trigger_to_detector = STIX_INSTRUMENT.subcol_adc_mapping
+            triggers = self.data["triggers"][:, trigger_to_detector].astype(float)
+        livefrac, *_ = get_livetime_fraction(triggers / self.data["timedel"].to("s").reshape(-1, 1))
+        return livefrac
+
+    @cached_property
+    def livetime(self):
+        """
+        Livetime.
+        """
+        return self.livetime_fraction * self.data["timedel"].to("s").reshape(-1, 1)
+
+    @property
+    def pixel_area(self):
+        """
+        Pixel areas
+        """
+        from stixpy.config.instrument import STIX_INSTRUMENT
+
+        base_areas = STIX_INSTRUMENT.pixel_config["Area"].to("cm2")  # shape (12,)
+        if "pixel_masks" in self.data.colnames:
+            return base_areas * self.data["pixel_masks"].astype(float)  # shape (n_times, 12)
+        return base_areas
+
+    @cached_property
+    def elut(self):
+        """
+        ELUT correction
+        """
+        from types import SimpleNamespace
+
+        from stixpy.calibration.energy import get_elut
+
+        energy_mask = self.energy_masks.energy_mask.astype(bool)
+        elut = get_elut(self.time_range.center)
+        ebin_edges_low = np.zeros((32, 12, 32), dtype=float)
+        ebin_edges_low[..., 1:] = elut.e_actual
+        ebin_edges_low = ebin_edges_low[..., energy_mask]
+        ebin_edges_high = np.zeros((32, 12, 32), dtype=float)
+        ebin_edges_high[..., 0:-1] = elut.e_actual
+        ebin_edges_high[..., -1] = np.nan
+        ebin_edges_high = ebin_edges_high[..., energy_mask]
+        ebin_widths = ebin_edges_high - ebin_edges_low
+        ebin_sci_edges_low = elut.e[..., 0:-1].value[..., energy_mask]
+        ebin_sci_edges_high = elut.e[..., 1:].value[..., energy_mask]
+        return SimpleNamespace(
+            ebin_edges_low=ebin_edges_low,
+            ebin_edges_high=ebin_edges_high,
+            ebin_widths=ebin_widths,
+            ebin_sci_edges_low=ebin_sci_edges_low,
+            ebin_sci_edges_high=ebin_sci_edges_high,
+        )
+
     def get_data(
         self,
         *,
@@ -466,6 +539,8 @@ class ScienceData(L1Product):
         detector_indices=None,
         pixel_indices=None,
         sum_all_times=False,
+        livetime_correction=True,
+        elut_correction=False,
     ):
         r"""
         Return the counts, errors, times, durations and energies for selected data.
@@ -497,6 +572,15 @@ class ScienceData(L1Product):
             sixth pixels while `pixel_indices=[[0, 2],[3, 5]]` would sum the data between.
         sum_all_times : `bool`
             Flag to sum all give time intervals into one
+        livetime_correction : `bool`
+            If `True`, divide counts by the per-detector livetime before applying any vtype normalisation.
+            Applied after detector selection so the correct per-detector fractions are used before any
+            summing over detectors.
+        elut_correction : `bool`
+            If `True` (default), scale the boundary energy bins by the ELUT fractional-coverage
+            correction, matching the correction applied in `create_meta_pixels`. Applied within
+            the energy selection step so the true boundary bins of the selection are corrected.
+            Only active for full pixel data (32 detectors, 12 pixels) with ``energy_masks`` available.
 
         Returns
         -------
@@ -515,24 +599,30 @@ class ScienceData(L1Product):
             counts_var = counts_var.reshape(shape[0], 1, 1, shape[-1])
 
         energies = self.energies[:]
-        times = self.times
+        times = self.time
 
         if detector_indices is not None:
-            detecor_indices = np.asarray(detector_indices)
-            if detecor_indices.ndim == 1:
+            detector_indices = np.asarray(detector_indices)
+            if detector_indices.ndim == 1:
                 detector_mask = np.full(32, False)
-                detector_mask[detecor_indices] = True
+                detector_mask[detector_indices] = True
                 counts = counts[:, detector_mask, ...]
                 counts_var = counts_var[:, detector_mask, ...]
-            elif detecor_indices.ndim == 2:
-                counts = np.hstack(
-                    [np.sum(counts[:, dl : dh + 1, ...], axis=1, keepdims=True) for dl, dh in detecor_indices]
+            elif detector_indices.ndim == 2:
+                counts = np.concatenate(
+                    [np.sum(counts[:, dl : dh + 1, ...], axis=1, keepdims=True) for dl, dh in detector_indices], axis=1
                 )
-
                 counts_var = np.concatenate(
-                    [np.sum(counts_var[:, dl : dh + 1, ...], axis=1, keepdims=True) for dl, dh in detecor_indices],
+                    [np.sum(counts_var[:, dl : dh + 1, ...], axis=1, keepdims=True) for dl, dh in detector_indices],
                     axis=1,
                 )
+        else:
+            detector_indices = self.detectors.masks[0]
+
+        if livetime_correction:
+            lt = self.livetime_fraction[:, : counts.shape[1]].reshape(counts.shape[0], counts.shape[1], 1, 1)
+            counts = counts / lt
+            counts_var = counts_var / lt**2
 
         if pixel_indices is not None:
             pixel_indices = np.asarray(pixel_indices)
@@ -546,41 +636,97 @@ class ScienceData(L1Product):
                 counts = np.concatenate(
                     [np.sum(counts[..., pl : ph + 1, :], axis=2, keepdims=True) for pl, ph in pixel_indices], axis=2
                 )
-
                 counts_var = np.concatenate(
                     [np.sum(counts_var[..., pl : ph + 1, :], axis=2, keepdims=True) for pl, ph in pixel_indices], axis=2
                 )
+        else:
+            pixel_indices = self.pixels.masks[0].astype(np.bool)
 
         e_norm = self.dE
-        if energy_indices is not None:
+        # 1. Handle None: Default to all channels
+        if energy_indices is None:
+            energy_indices = np.arange(counts.shape[-1])
+        else:
             energy_indices = np.asarray(energy_indices)
-            if energy_indices.ndim == 1:
-                energy_mask = np.full(shape[-1], False)
-                energy_mask[energy_indices] = True
-                counts = counts[..., energy_mask]
-                counts_var = counts_var[..., energy_mask]
-                e_norm = self.dE[energy_mask]
-                energies = self.energies[energy_mask]
-            elif energy_indices.ndim == 2:
-                counts = np.concatenate(
-                    [np.sum(counts[..., el : eh + 1], axis=-1, keepdims=True) for el, eh in energy_indices], axis=-1
+
+        ec = self.elut
+
+        # Specific Channels (1D)
+        if energy_indices.ndim == 1:
+            energy_mask = np.full(counts.shape[-1], False)
+            energy_mask[energy_indices] = True
+
+            counts = counts[..., energy_mask]
+            counts_var = counts_var[..., energy_mask]
+
+            if elut_correction:
+                # The correct overlap fraction for a single bin
+                corr = (ec.ebin_edges_high[..., energy_indices] - ec.ebin_edges_low[..., energy_indices]) / (
+                    ec.ebin_sci_edges_high[energy_indices] - ec.ebin_sci_edges_low[energy_indices]
                 )
 
-                counts_var = np.concatenate(
-                    [np.sum(counts_var[..., el : eh + 1], axis=-1, keepdims=True) for el, eh in energy_indices], axis=-1
-                )
+                counts = counts * corr[:, pixel_indices]
+                counts_var = counts_var * corr[:, pixel_indices]
 
-                e_norm = np.hstack([(energies["e_high"][eh] - energies["e_low"][el]) for el, eh in energy_indices])
+            e_low = self._energies["e_low"][energy_indices]
+            e_high = self._energies["e_high"][energy_indices]
+            energies = QTable([e_low, e_high], names=["e_low", "e_high"])
+            e_norm = e_high - e_low
 
-                energies = np.atleast_2d(
-                    [
-                        (self._energies["e_low"][el].value, self._energies["e_high"][eh].value)
-                        for el, eh in energy_indices
-                    ]
-                )
-                energies = QTable(energies * u.keV, names=["e_low", "e_high"])
+        # Summed Ranges (2D) ---
+        elif energy_indices.ndim == 2:
+            # Precompute specific directional corrections
+            c_low_side = (ec.ebin_edges_high - ec.ebin_sci_edges_low) / ec.ebin_widths
+            c_high_side = (ec.ebin_sci_edges_high - ec.ebin_edges_low) / ec.ebin_widths
+            # Full bin correction (used if a range is only 1 bin wide)
+            c_full_bin = (ec.ebin_edges_high - ec.ebin_edges_low) / ec.ebin_widths
 
-        t_norm = self.data["timedel"]
+            new_counts = []
+            new_vars = []
+            e_low_list = []
+            e_high_list = []
+
+            for el, eh in energy_indices:
+                if elut_correction:
+                    if el == eh:
+                        # Range is only one bin: correct both sides
+                        corr = c_full_bin[..., el]
+                        c_sum = counts[..., el] * corr
+                        v_sum = counts_var[..., el] * corr
+                    else:
+                        # First bin: correct low | Last bin: correct high | Middle: no correction
+                        c_first = counts[..., el] * c_low_side[..., el]
+                        c_last = counts[..., eh] * c_high_side[..., eh]
+                        v_first = counts_var[..., el] * c_low_side[..., el]
+                        v_last = counts_var[..., eh] * c_high_side[..., eh]
+
+                        c_mid = np.sum(counts[..., el + 1 : eh], axis=-1) if eh - el > 1 else 0
+                        v_mid = np.sum(counts_var[..., el + 1 : eh], axis=-1) if eh - el > 1 else 0
+
+                        c_sum = c_first + c_mid + c_last
+                        v_sum = v_first + v_mid + v_last
+                else:
+                    c_sum = np.sum(counts[..., el : eh + 1], axis=-1)
+                    v_sum = np.sum(counts_var[..., el : eh + 1], axis=-1)
+
+                new_counts.append(c_sum)
+                new_vars.append(v_sum)
+                e_low_list.append(self._energies["e_low"][el])
+                e_high_list.append(self._energies["e_high"][eh])
+
+            counts = np.stack(new_counts, axis=-1)
+            counts_var = np.stack(new_vars, axis=-1)
+
+            energies = QTable([u.Quantity(e_low_list), u.Quantity(e_high_list)], names=["e_low", "e_high"])
+            e_norm = energies["e_high"] - energies["e_low"]
+
+        if not livetime_correction:
+            t_norm = self.duration
+        else:
+            if isinstance(self, Spectrogram):
+                t_norm = self.livetime
+            else:
+                t_norm = self.livetime[:, detector_indices]
         if time_indices is not None:
             time_indices = np.asarray(time_indices)
             if time_indices.ndim == 1:
@@ -588,15 +734,25 @@ class ScienceData(L1Product):
                 time_mask[time_indices] = True
                 counts = counts[time_mask, ...]
                 counts_var = counts_var[time_mask, ...]
-                t_norm = self.data["timedel"][time_mask]
+                t_norm = self.data["timedel"][time_mask] if not livetime_correction else self.livetime[time_mask]
                 times = times[time_mask]
-                # dT = self.data['timedel'][time_mask]
             elif time_indices.ndim == 2:
+                # Warn if any time-varying columns change within a summed interval
+                varying_cols = [c for c in ("rcr", "pixel_masks", "detector_masks") if c in self.data.colnames]
+                for tl, th in time_indices:
+                    changed = [c for c in varying_cols if np.unique(self.data[c][tl : th + 1], axis=0).shape[0] != 1]
+                    if changed:
+                        warnings.warn(
+                            f"The following columns change within the summed time interval [{tl}, {th}]: "
+                            f"{', '.join(changed)}. Summing may produce incorrect results.",
+                            stacklevel=2,
+                        )
                 new_times = []
                 dt = []
+                durations = self.duration if not livetime_correction else self.livetime
                 for tl, th in time_indices:
-                    ts = times[tl] - self.data["timedel"][tl] * 0.5
-                    te = times[th] + self.data["timedel"][th] * 0.5
+                    ts = times[tl] - durations[tl] * 0.5
+                    te = times[th] + durations[th] * 0.5
                     td = te - ts
                     tc = ts + (td * 0.5)
                     dt.append(td.to("s"))
@@ -604,7 +760,6 @@ class ScienceData(L1Product):
                 dt = np.hstack(dt)
                 times = Time(new_times)
                 counts = np.vstack([np.sum(counts[tl : th + 1, ...], axis=0, keepdims=True) for tl, th in time_indices])
-
                 counts_var = np.vstack(
                     [np.sum(counts_var[tl : th + 1, ...], axis=0, keepdims=True) for tl, th in time_indices]
                 )
@@ -620,7 +775,12 @@ class ScienceData(L1Product):
         if e_norm.size != 1:
             e_norm = e_norm.reshape(1, 1, 1, -1)
 
-        if t_norm.size != 1:
+        if t_norm.size != 1 and livetime_correction:
+            if detector_indices.ndim == 2:
+                t_norm = t_norm.sum(axis=-1)
+            t_norm = t_norm.reshape(-1, counts.shape[1], 1, 1).to("s")
+
+        else:
             t_norm = t_norm.reshape(-1, 1, 1, 1).to("s")
 
         if vtype == "c":
