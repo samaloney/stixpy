@@ -738,15 +738,15 @@ class ScienceData(L1Product):
                     sci_hi_edge = elut.ebin_sci_edges_high[hi]
                     w_low = (ew_edges_high[..., lo] - sci_lo_edge) / ew_widths[..., lo]  # (n_det, n_pix)
                     w_high = (sci_hi_edge - ew_edges_low[..., hi]) / ew_widths[..., hi]  # (n_det, n_pix)
-                    c = counts[..., lo : hi + 1].copy()  # (T, 32, 12, n_range_bins)
-                    vs = counts_stat_var[..., lo : hi + 1].copy()
-                    vc = counts_comp_var[..., lo : hi + 1].copy()
-                    c[..., 0] *= w_low[None]
-                    c[..., -1] *= w_high[None]
-                    vs[..., 0] *= w_low[None] ** 2
-                    vs[..., -1] *= w_high[None] ** 2
-                    vc[..., 0] *= w_low[None] ** 2
-                    vc[..., -1] *= w_high[None] ** 2
+                    # Build per-bin weight array (1, n_det, n_pix, n_bins)
+                    # When lo==hi, both w_low and w_high multiply the same bin → replicates IDL behaviour
+                    n_bins = hi - lo + 1
+                    w = np.ones((1,) + w_low.shape + (n_bins,), dtype=float)
+                    w[..., 0] *= w_low.unmasked  # (32, 8) broadcasts against (1, 32, 8, n_bins)[..., 0]
+                    w[..., -1] *= w_high.unmasked
+                    c = np.asarray(counts[..., lo : hi + 1], dtype=float) * w
+                    vs = np.asarray(counts_stat_var[..., lo : hi + 1], dtype=float) * w**2
+                    vc = np.asarray(counts_comp_var[..., lo : hi + 1], dtype=float) * w**2
                     counts_list.append(c.sum(axis=-1, keepdims=True))
                     stat_var_list.append(vs.sum(axis=-1, keepdims=True))
                     comp_var_list.append(vc.sum(axis=-1, keepdims=True))
