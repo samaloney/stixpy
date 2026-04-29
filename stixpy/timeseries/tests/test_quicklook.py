@@ -1,5 +1,7 @@
-import astropy.units as u
 import pytest
+
+import astropy.units as u
+
 from sunpy.timeseries import TimeSeries
 
 from stixpy.timeseries.quicklook import HKMaxi, QLBackground, QLLightCurve, QLVariance

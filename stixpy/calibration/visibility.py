@@ -1,16 +1,17 @@
 from types import SimpleNamespace
-from typing import Union
 from pathlib import Path
 
-import astropy.units as u
 import numpy as np
+from xrayvision.visibility import Visibilities, VisMeta
+
+import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.table import Table
 from astropy.time import Time
 from astropy.units import Quantity
+
 from sunpy.coordinates import HeliographicStonyhurst
 from sunpy.time import TimeRange
-from xrayvision.visibility import Visibilities, VisMeta
 
 from stixpy.calibration.energy import get_elut
 from stixpy.calibration.grid import get_grid_transmission
@@ -127,7 +128,7 @@ def get_subcollimator_info():
 
 @u.quantity_input
 def create_meta_pixels(
-    pixel_data: Union[RawPixelData, CompressedPixelData, SummedCompressedPixelData],
+    pixel_data: RawPixelData | CompressedPixelData | SummedCompressedPixelData,
     time_range: Time,
     energy_range: Quantity["energy"],  # noqa: F821
     flare_location: SkyCoord | None = None,
@@ -185,7 +186,7 @@ def create_meta_pixels(
     )
 
     changed = []
-    
+
     for column in ["rcr", "pixel_masks", "detector_masks"]:
         if np.unique(pixel_data.data[column][t_ind], axis=0).shape[0] != 1:
             changed.append(column)
@@ -200,7 +201,7 @@ def create_meta_pixels(
     # Map the triggers to all 32 detectors
     triggers = pixel_data.data["triggers"][:, trigger_to_detector].astype(float)[...]
 
-    _, livefrac, _ = get_livetime_fraction(triggers / pixel_data.data["timedel"].to("s").reshape(-1, 1))
+    livefrac, *_ = get_livetime_fraction(triggers / pixel_data.data["timedel"].to("s").reshape(-1, 1))
 
     pixel_data.data["livefrac"] = livefrac
 
@@ -222,7 +223,7 @@ def create_meta_pixels(
     count_errors = np.sqrt(pixel_data.data["counts_comp_err"].astype(float).value ** 2 + counts.value) * u.ct
     ct = counts[t_ind][..., idx_pix, e_ind]
     # print('ct = ',np.shape(ct))
-    ct_or = ct
+    # ct_or = ct
     ct[..., 0] = ct[..., 0] * e_cor_low[..., idx_pix]
     ct[..., -1] = ct[..., -1] * e_cor_high[..., idx_pix]
     ct_error = count_errors[t_ind][..., idx_pix, e_ind]
@@ -230,7 +231,7 @@ def create_meta_pixels(
     ct_error[..., -1] = ct_error[..., -1] * e_cor_high[..., idx_pix]
 
     # print(np.where( ((ct / ct_or) != 1) & (np.isnan(ct / ct_or) == False) )[0])
-    
+
     # indices = np.where(ct[...,0] != ct_or[...,0])
     # print(indices)
 
@@ -309,7 +310,6 @@ def get_elut_correction(e_ind, pixel_data):
     e_cor_low = (ebin_edges_high[..., e_ind[0]] - ebin_sci_edges_low[..., e_ind[0]]) / ebin_widths[..., e_ind[0]]
     e_cor_high = (ebin_sci_edges_high[..., e_ind[-1]] - ebin_edges_low[..., e_ind[-1]]) / ebin_widths[..., e_ind[-1]]
 
-
     return e_cor_high, e_cor_low
 
 
@@ -380,7 +380,9 @@ def create_visibility(meta_pixels):
     return vis
 
 
-def calibrate_visibility(vis: Visibilities, flare_location: SkyCoord = STIXImaging(0 * u.arcsec, 0 * u.arcsec)):
+def calibrate_visibility(
+    vis: Visibilities, flare_location: SkyCoord = SkyCoord(0 * u.arcsec, 0 * u.arcsec, frame=STIXImaging)
+):
     """
     Calibrate visibility phase and amplitudes.
 
@@ -410,6 +412,8 @@ def calibrate_visibility(vis: Visibilities, flare_location: SkyCoord = STIXImagi
 
     tr = TimeRange(vis.meta.time_range)
 
+    if not isinstance(flare_location, SkyCoord):
+        raise ValueError("'flare_location' is not a SkyCoord object")
     if not isinstance(flare_location.frame, STIXImaging) or flare_location.obstime != tr.center:
         roll, solo_heeq, stix_pointing = get_hpc_info(vis.meta.time_range[0], vis.meta.time_range[1])
         solo_coord = HeliographicStonyhurst(solo_heeq, representation_type="cartesian", obstime=tr.center)

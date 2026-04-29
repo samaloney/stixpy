@@ -1,11 +1,12 @@
 from pathlib import Path
 from datetime import datetime
 
-import astropy.units as u
 import numpy as np
-from astropy.table import QTable, Table
 from dateutil.parser import parse
 from intervaltree import IntervalTree
+
+import astropy.units as u
+from astropy.table import QTable, Table
 
 
 def read_energy_channel_index(echan_index_file):
@@ -134,19 +135,10 @@ def read_elut(elut_file, sci_channels):
 
     elut = type("ELUT", (object,), dict())
     elut.file = elut_file.name
-    try:
-        elut.offset = elut_table["Offset"].reshape(32, 12)
-        elut.gain = elut_table["Gain keV/ADC"].reshape(32, 12)
-    except KeyError:
-        try:
-            elut.offset = elut_table["Offset (ADC)"].reshape(32, 12)
-            elut.gain = elut_table["Gain (keV/ADC)"].reshape(32, 12)
-
-        except KeyError:
-            elut.offset = elut_table["Offset (ADC)"].reshape(32, 12)
-            elut.gain = elut_table["Gain (ADC/keV)"].reshape(32, 12)
-
-
+    offset_col = [col for col in elut_table.colnames if "offset" in col.casefold()][0]
+    gain_col = [col for col in elut_table.colnames if "gain" in col.casefold()][0]
+    elut.offset = elut_table[offset_col].reshape(32, 12)
+    elut.gain = elut_table[gain_col].reshape(32, 12)
     elut.pixel = elut_table["Pixel"].reshape(32, 12)
     elut.detector = elut_table["Detector"].reshape(32, 12)
     adc = np.vstack(list(elut_table.columns[4:].values())).reshape(31, 32, 12)

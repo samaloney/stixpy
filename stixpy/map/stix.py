@@ -2,6 +2,7 @@ import inspect
 
 import astropy.units as u
 from astropy import wcs
+
 from sunpy.map import GenericMap
 
 __all__ = ["STIXMap"]

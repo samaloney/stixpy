@@ -1,7 +1,10 @@
+import os
 from pathlib import Path
 from unittest import mock
 
 import pytest
+
+import sunpy
 from sunpy.net import Fido
 from sunpy.net import attrs as a
 
@@ -84,6 +87,8 @@ def test_client(urlopen, client, http_response, time_range, nfiles):
     assert len(query) == nfiles
 
 
+@pytest.mark.skipif(sunpy.__version__ < "7.1.0", reason="Bug fix not backported")
+@pytest.mark.skipif(os.name == "nt", reason="Upstream sunpy bug on windows")
 @pytest.mark.parametrize(
     "time_range, level, dtype, nfiles",
     [
@@ -118,6 +123,8 @@ def test_search_date(client):
     # this might need fixed when we change to ANC to become an level of its own
 
 
+@pytest.mark.skipif(sunpy.__version__ < "7.1.0", reason="Bug fix not backported")
+@pytest.mark.skipif(os.name == "nt", reason="Upstream sunpy bug on windows")
 def test_search_max_version(clientlocal):
     res = clientlocal.search(a.Time("2022-01-01T00:00", "2022-01-01T23:59"), a.Instrument.stix, a.stix.MaxVersion(3))
     assert len(res) == 6
@@ -127,9 +134,11 @@ def test_search_max_version(clientlocal):
         a.Instrument.stix,
         a.stix.MaxVersionU(3),
     )
-    assert len(res) == 7
+    assert len(res) == 8
 
 
+@pytest.mark.skipif(sunpy.__version__ < "7.1.0", reason="Bug fix not backported")
+@pytest.mark.skipif(os.name == "nt", reason="Upstream sunpy bug on windows")
 def test_search_min_version(clientlocal):
     res = clientlocal.search(a.Time("2022-01-01T00:00", "2022-01-01T23:59"), a.Instrument.stix, a.stix.MinVersion(2))
     assert len(res) == 6
@@ -142,6 +151,8 @@ def test_search_min_version(clientlocal):
     assert len(res) == 8
 
 
+@pytest.mark.skipif(sunpy.__version__ < "7.1.0", reason="Bug fix not backported")
+@pytest.mark.skipif(os.name == "nt", reason="Upstream sunpy bug on windows")
 def test_search_version(clientlocal):
     res = clientlocal.search(a.Time("2022-01-01T00:00", "2022-01-01T23:59"), a.Instrument.stix, a.stix.Version(2))
     assert len(res) == 4
@@ -154,19 +165,25 @@ def test_search_version(clientlocal):
     assert len(res) == 3
 
 
+@pytest.mark.skipif(sunpy.__version__ < "7.1.0", reason="Bug fix not backported")
+@pytest.mark.skipif(os.name == "nt", reason="Upstream sunpy bug on windows")
 def test_search_version_and(clientlocal):
     res = clientlocal.search(
         a.Time("2022-01-01T00:00", "2022-01-01T23:59"), a.Instrument.stix, a.stix.MinVersion(2), a.stix.MaxVersionU(5)
     )
-    assert len(res) == 5
+    assert len(res) == 6
 
 
+@pytest.mark.skipif(sunpy.__version__ < "7.1.0", reason="Bug fix not backported")
+@pytest.mark.skipif(os.name == "nt", reason="Upstream sunpy bug on windows")
 def test_search_latest_version_empty(clientlocal):
     res = clientlocal.search(a.Time("2023-01-01T00:00", "2023-01-01T23:59"), a.Instrument.stix)
     res.filter_for_latest_version()
     assert len(res) == 0
 
 
+@pytest.mark.skipif(sunpy.__version__ < "7.1.0", reason="Bug fix not backported")
+@pytest.mark.skipif(os.name == "nt", reason="Upstream but on windows")
 def test_search_latest_version(clientlocal):
     res = clientlocal.search(a.Time("2022-01-01T00:00", "2022-01-01T23:59"), a.Instrument.stix)
     res.filter_for_latest_version(allow_uncompleted=True)
@@ -236,36 +253,69 @@ def test_search_date_product_sci():
     assert len(res) == 1
 
 
+@pytest.mark.parametrize(
+    "query, expected_len, is_total",
+    [
+        ([a.Instrument.stix], 67, True),
+        ([a.Instrument.stix, a.stix.DataType.ql], 6, False),
+        ([a.Instrument.stix, a.stix.DataType.sci], 58, False),
+        ([a.Instrument.stix, a.stix.DataType.hk], 1, False),
+        ([a.Instrument.stix, a.stix.DataType.asp], 1, False),
+        ([a.Instrument.stix, a.stix.DataType.cal], 1, False),
+    ],
+)
 @pytest.mark.remote_data
-def test_fido():
-    res = Fido.search(a.Time("2020-11-17T00:00", "2020-11-17T23:59"), a.Instrument.stix)
-    len_total = len(res["stix"])
-    assert len_total == 67
-
-    res_ql = Fido.search(a.Time("2020-11-17T00:00", "2020-11-17T23:59"), a.Instrument.stix, a.stix.DataType.ql)
-    len_ql = len(res_ql["stix"])
-    assert len_ql == 6
-
-    res_sci = Fido.search(a.Time("2020-11-17T00:00", "2020-11-17T23:59"), a.Instrument.stix, a.stix.DataType.sci)
-    len_sci = len(res_sci["stix"])
-    assert len_sci == 58
-
-    res_hk = Fido.search(a.Time("2020-11-17T00:00", "2020-11-17T23:59"), a.Instrument.stix, a.stix.DataType.hk)
-    len_kh = len(res_hk["stix"])
-    assert len_kh == 1
-
-    res_asp = Fido.search(a.Time("2020-11-17T00:00", "2020-11-17T23:59"), a.Instrument.stix, a.stix.DataType.asp)
-    len_asp = len(res_asp["stix"])
-    assert len_asp == 1
-
-    res_cal = Fido.search(a.Time("2020-11-17T00:00", "2020-11-17T23:59"), a.Instrument.stix, a.stix.DataType.cal)
-    len_cal = len(res_cal["stix"])
-    assert len_cal == 1
-
-    assert len_ql + len_sci + len_kh + len_asp + len_cal == len_total
+def test_fido(query, expected_len, is_total):
+    res = Fido.search(a.Time("2020-11-17T00:00", "2020-11-17T23:59"), *query)
+    actual_len = len(res["stix"])
+    assert actual_len == expected_len
 
 
 @pytest.mark.remote_data
 def test_fido_file_crosses_date_boundary():
     q = Fido.search(a.Time("2023-06-01T00:00", "2023-06-01T00:30"), a.Instrument.stix, a.stix.DataProduct.sci_xray_spec)
     assert len(q["stix"]) == 2
+
+
+def test_version_attributes_import():
+    from stixpy.net.attrs import MaxVersion, MaxVersionU, MinVersion, MinVersionU, Version, VersionU
+
+    assert Version is not None
+    assert VersionU is not None
+    assert MinVersion is not None
+    assert MinVersionU is not None
+    assert MaxVersion is not None
+    assert MaxVersionU is not None
+
+
+def test_version_attributes_functionality():
+    from stixpy.net.attrs import MaxVersion, MaxVersionU, MinVersion, MinVersionU, Version, VersionU
+
+    version_attr = Version(2)
+    assert version_attr.matches("V02")
+    assert not version_attr.matches("V03")
+    assert not version_attr.matches("V02U")
+
+    version_u_attr = VersionU(2)
+    assert version_u_attr.matches("V02")
+    assert version_u_attr.matches("V02U")
+    assert not version_u_attr.matches("V03")
+
+    min_version_attr = MinVersion(2)
+    assert min_version_attr.matches("V02")
+    assert min_version_attr.matches("V03")
+    assert not min_version_attr.matches("V01")
+
+    max_version_attr = MaxVersion(3)
+    assert max_version_attr.matches("V02")
+    assert max_version_attr.matches("V03")
+    assert not max_version_attr.matches("V04")
+
+    min_version_u_attr = MinVersionU(2)
+    assert min_version_u_attr.matches("V02U")
+    assert min_version_u_attr.matches("V03U")
+
+    max_version_u_attr = MaxVersionU(3)
+    assert max_version_u_attr.matches("V02U")
+    assert max_version_u_attr.matches("V03U")
+    assert not max_version_u_attr.matches("V04U")

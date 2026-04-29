@@ -1,4 +1,5 @@
 import pytest
+
 from astropy.coordinates import SkyCoord
 
 from stixpy.product import Product

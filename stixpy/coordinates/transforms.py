@@ -1,14 +1,16 @@
 import warnings
 from functools import lru_cache
 
+import numpy as np
+
 import astropy.coordinates as coord
 import astropy.units as u
-import numpy as np
 from astropy.coordinates import frame_transform_graph
 from astropy.coordinates.matrix_utilities import matrix_transpose, rotation_matrix
 from astropy.io import fits
 from astropy.table import QTable, vstack
 from astropy.time import Time
+
 from sunpy.coordinates import HeliographicStonyhurst, Helioprojective
 from sunpy.net import Fido
 from sunpy.net import attrs as a
@@ -68,11 +70,15 @@ def get_hpc_info(times, end_time=None):
     -------
 
     """
-    aux = _get_ephemeris_data(times.min(), end_time or times.max())
-
-    indices = np.argwhere((aux["time"] >= times.min()) & (aux["time"] <= times.max()))
     if end_time is not None:
-        indices = np.argwhere((aux["time"] >= times.min()) & (aux["time"] <= end_time))
+        end_time = end_time.max()
+    aux = _get_ephemeris_data(times.min(), end_time if end_time is not None else times.max())
+
+    if end_time is not None:
+        indices = np.argwhere((aux["time"] >= times.min()) & (aux["time"] <= end_time.max()))
+    else:
+        indices = np.argwhere((aux["time"] >= times.min()) & (aux["time"] <= times.max()))
+
     indices = indices.flatten()
 
     if end_time is not None and times.size == 1 and indices.size >= 2:
@@ -197,6 +203,7 @@ def _get_ephemeris_data(start_time, end_time=None):
         aux["time"] = (
             date_beg + aux["time"] - 32 * u.s
         )  # Shift AUX data by half a time bin (starting time vs. bin centre)
+        [aux.meta.pop(key) for key in ["CHECKSUM", "DATASUM"]]
         aux_data.append(aux)
 
     aux = vstack(aux_data)
@@ -216,7 +223,7 @@ def stixim_to_hpc(stxcoord, hpcframe):
 
     obstime = stxcoord.obstime
     if stxcoord.obstime_end is not None:
-        obstime = np.mean(Time([stxcoord.obstime, stxcoord.obstime_end]))
+        obstime = stxcoord.obstime + (stxcoord.obstime_end - stxcoord.obstime) / 2
 
     solo_heeq = HeliographicStonyhurst(solo_pos_heeq.T, representation_type="cartesian", obstime=obstime)
 
@@ -249,7 +256,7 @@ def hpc_to_stixim(hpccoord, stxframe):
 
     obstime = stxframe.obstime
     if stxframe.obstime_end is not None:
-        obstime = np.mean(Time([stxframe.obstime, stxframe.obstime_end]))
+        obstime = stxframe.obstime + (stxframe.obstime_end - stxframe.obstime) / 2
     solo_hgs = HeliographicStonyhurst(solo_pos_heeq.T, representation_type="cartesian", obstime=obstime)
 
     # Create SOLO HPC

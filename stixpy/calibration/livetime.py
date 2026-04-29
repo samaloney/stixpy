@@ -59,10 +59,11 @@ References
 STIX-TN-0015-ETH_I1R0_Caliste_Rates
 """
 
-import astropy.units as u
 import numpy as np
 
-__all__ = ["pileup_correction_factor", "get_livetime_fraction","livetime_counts_corr"]
+import astropy.units as u
+
+__all__ = ["pileup_correction_factor", "get_livetime_fraction"]
 
 from stixpy.io.readers import read_subc_params
 
@@ -93,7 +94,7 @@ def pileup_correction_factor():
     return prob_diff_pix
 
 
-def get_livetime_fraction(trigger_rate,*, eta=1.1e-6 *u.s, tau=10.1e-6 * u.s):
+def get_livetime_fraction(trigger_rate, *, eta=1.10 * u.us, tau=10.1 * u.us):
     """
     Return the live time fraction for the given trigger rate.
 
@@ -109,20 +110,12 @@ def get_livetime_fraction(trigger_rate,*, eta=1.1e-6 *u.s, tau=10.1e-6 * u.s):
     Returns
     -------
     `float`, `float`, `float`:
-        The live time fraction
+        The correct live time fraction, two photon contribution, and number of input photon.
     """
     beta = 0.94059104  # pileup_correction_factor()
 
-    # tau = tau / time_del
-    # eta = eta / time_del
-
     photons_in = trigger_rate / (1.0 - trigger_rate * (tau + eta))
-    livetime_fraction = 1 / (1.0 + (tau + eta) * photons_in)
-    two_photon = np.exp(-eta * beta * photons_in) * livetime_fraction
-
-
-    return livetime_fraction, two_photon, photons_in
-
-     
-
-    
+    live_fraction = 1 / (1.0 + (tau + eta) * photons_in)
+    two_photon_correction = np.exp(-eta * beta * photons_in)
+    corrected_livetime = two_photon_correction * live_fraction
+    return corrected_livetime, two_photon_correction, photons_in

@@ -13,16 +13,18 @@ Imports
 
 import logging
 
-import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
-from astropy.coordinates import SkyCoord
-from sunpy.coordinates import HeliographicStonyhurst, Helioprojective
-from sunpy.map import Map, make_fitswcs_header
-from sunpy.time import TimeRange
 from xrayvision.clean import vis_clean
 from xrayvision.imaging import vis_to_image, vis_to_map
 from xrayvision.mem import mem, resistant_mean
+
+import astropy.units as u
+from astropy.coordinates import SkyCoord
+
+from sunpy.coordinates import HeliographicStonyhurst, Helioprojective
+from sunpy.map import Map, make_fitswcs_header
+from sunpy.time import TimeRange
 
 from stixpy.calibration.visibility import calibrate_visibility, create_meta_pixels, create_visibility
 from stixpy.coordinates.frames import STIXImaging
@@ -87,19 +89,23 @@ meta_pixels_bkg_subtracted = {
 vis = create_visibility(meta_pixels_bkg_subtracted)
 
 ###############################################################################
-# Obtain the necessary ephemeris data create HPC 0,0 coordinate
+# Obtain the necessary ephemeris data
 
 vis_tr = TimeRange(vis.meta["time_range"])
 roll, solo_xyz, pointing = get_hpc_info(vis_tr.start, vis_tr.end)
 solo = HeliographicStonyhurst(*solo_xyz, obstime=vis_tr.center, representation_type="cartesian")
-center_hpc = SkyCoord(0 * u.deg, 0 * u.deg, frame=Helioprojective(obstime=vis_tr.center, observer=solo))
+center_stix = SkyCoord(
+    0 * u.deg,
+    0 * u.deg,
+    frame=STIXImaging(obstime=vis_tr.start, obstime_end=vis_tr.end, observer=solo),
+)
 
 ###############################################################################
 # Calibrate the visibilities
 #
-# If not given will default to sun center flare location
+# If not given will default to center of STIX field-of-view
 
-cal_vis = calibrate_visibility(vis, flare_location=center_hpc)
+cal_vis = calibrate_visibility(vis, flare_location=center_stix)
 
 ###############################################################################
 # Selected detectors 10 to 7
@@ -127,18 +133,15 @@ bp_image = vis_to_image(vis10_7, imsize, pixel_size=pixel)
 ###############################################################################
 # Obtain the necessary ephemeris data
 
-vis_tr = TimeRange(vis.meta["time_range"])
-roll, solo_xyz, pointing = get_hpc_info(vis_tr.start, vis_tr.end)
-solo = HeliographicStonyhurst(*solo_xyz, obstime=vis_tr.center, representation_type="cartesian")
-coord_stix = center_hpc.transform_to(STIXImaging(obstime=vis_tr.start, obstime_end=vis_tr.end, observer=solo))
 header = make_fitswcs_header(
-    bp_image, coord_stix, telescope="STIX", observatory="Solar Orbiter", scale=[10, 10] * u.arcsec / u.pix
+    bp_image, center_stix, telescope="STIX", observatory="Solar Orbiter", scale=[10, 10] * u.arcsec / u.pix
 )
 fd_bp_map = Map((bp_image, header))
 
 ###############################################################################
 # Convert the coordinates and make a map in Helioprojective and rotate so "North" is "up"
 # Center of STIX pointing in HPC
+center_hpc = center_stix.transform_to(Helioprojective(obstime=vis_tr.center))
 header_hp = make_fitswcs_header(
     bp_image, center_hpc, scale=[10, 10] * u.arcsec / u.pix, rotation_angle=90 * u.deg + roll
 )

@@ -1,10 +1,12 @@
-import astropy.units as u
 import numpy as np
 import pytest
+from numpy.ma.testutils import assert_equal
+
+import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.tests.helper import assert_quantity_allclose
 from astropy.time import Time
-from numpy.ma.testutils import assert_equal
+
 from sunpy.coordinates import HeliographicStonyhurst, Helioprojective
 from sunpy.time import TimeRange
 
@@ -51,6 +53,7 @@ def test_get_read_det_adc_mapping():
     ).all()
 
 
+@pytest.mark.remote_data
 @pytest.mark.parametrize(
     "pixel_set,expected_abcd_rate_kev,expected_abcd_rate_kev_cm0,expected_abcd_rate_kev_cm1,areas",
     [
@@ -121,7 +124,7 @@ def test_create_meta_pixels_timebins(flare_cpd):
     energy_range = [6, 12] * u.keV
 
     # check time_range within one bin (i.e. timerange passed is within one bin)
-    time_range = [flare_cpd.times[0], flare_cpd.times[0] + flare_cpd.duration / 4]
+    time_range = [flare_cpd.times[0], flare_cpd.times[0] + flare_cpd.durations / 4]
     meta_pixels = create_meta_pixels(
         flare_cpd,
         time_range=time_range,
@@ -130,7 +133,7 @@ def test_create_meta_pixels_timebins(flare_cpd):
         no_shadowing=True,
     )
 
-    assert_quantity_allclose(meta_pixels["time_range"].dt.to(u.s), flare_cpd.duration[0].to(u.s))
+    assert_quantity_allclose(meta_pixels["time_range"].dt.to(u.s), flare_cpd.durations[0].to(u.s))
 
     # check time_range fully outside bins (i.e. all bins contained with timerange)
     time_range = [flare_cpd.times[0] - 10 * u.s, flare_cpd.times[-1] + 10 * u.s]
@@ -142,7 +145,7 @@ def test_create_meta_pixels_timebins(flare_cpd):
         no_shadowing=True,
     )
 
-    assert_quantity_allclose(np.sum(flare_cpd.duration), meta_pixels["time_range"].dt.to(u.s))
+    assert_quantity_allclose(np.sum(flare_cpd.durations), meta_pixels["time_range"].dt.to(u.s))
 
     # check time_range start and end are within bins
     time_range = [flare_cpd.times[0], flare_cpd.times[2]]
@@ -154,9 +157,10 @@ def test_create_meta_pixels_timebins(flare_cpd):
         no_shadowing=True,
     )
 
-    assert_quantity_allclose(np.sum(flare_cpd.duration[0:3]), meta_pixels["time_range"].dt.to(u.s))
+    assert_quantity_allclose(np.sum(flare_cpd.durations[0:3]), meta_pixels["time_range"].dt.to(u.s))
 
 
+@pytest.mark.remote_data
 def test_create_meta_pixels_shadow(flare_cpd):
     energy_range = [6, 12] * u.keV
     time_range = [flare_cpd.times[0], flare_cpd.times[2]]
@@ -206,8 +210,9 @@ def test_calibrate_visibility(flare_cpd):
         no_shadowing=True,
     )
     vis = create_visibility(meta_pixels)
-    time_centre = time_range[0] + np.diff(time_range) / 2
+    time_centre = time_range[0] + (time_range[1] - time_range[0]) / 2
     obs = HeliographicStonyhurst(0 * u.deg, 0 * u.deg, 1 * u.AU, obstime=time_centre)
     coord = SkyCoord(0 * u.deg, 0 * u.deg, frame=Helioprojective(obstime=time_centre, observer=obs))
     cal_vis = calibrate_visibility(vis, flare_location=coord)
-    assert_quantity_allclose(cal_vis.meta["offset"].data.xyz, coord.transform_to(STIXImaging).data.xyz)
+    res = coord.transform_to(STIXImaging).data.xyz
+    assert_quantity_allclose(cal_vis.meta["offset"].data.xyz, res)

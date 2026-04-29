@@ -1,36 +1,31 @@
-import copy
 from pathlib import Path
 from itertools import product
-from collections import defaultdict
+
+import numpy as np
+from matplotlib import pyplot as plt
+from matplotlib.colors import LogNorm
+from matplotlib.dates import ConciseDateFormatter, DateFormatter, HourLocator
+from matplotlib.widgets import Slider
+from ndcube import NDMeta
+from sunkit_spex.spectrum.spectrum import SpectralAxis, Spectrum
+from sunkit_spex.spectrum.uncertainty import PoissonUncertainty
 
 import astropy.units as u
-import numpy as np
 from astropy.table import QTable, vstack
 from astropy.time import Time
 from astropy.visualization import quantity_support
-from matplotlib import cm, colors
-from matplotlib import pyplot as plt
-from matplotlib.colors import LogNorm
-from matplotlib.dates import DateFormatter, HourLocator
-from matplotlib.patches import Patch
-from matplotlib.widgets import Slider
+
 from sunpy.time.timerange import TimeRange
-from datetime import timedelta
+from sunpy.util import deprecated
 
-
-from sunkit_spex.spectrum.spectrum import Spectrum, SpectralAxis
-from sunkit_spex.spectrum.uncertainty import PoissonUncertainty
-from ndcube import NDMeta
-from ndcube.extra_coords import QuantityTableCoordinate, TimeTableCoordinate
-
-from stixpy.calibration.livetime import get_livetime_fraction
-from stixpy.calibration.detector import get_srm
-from stixpy.io.readers import read_subc_params
 from stixpy.calibration.elut import get_elut_correction
-from stixpy.product.product import L1Product
-from stixpy.config.instrument import STIX_INSTRUMENT, _get_uv_points_data
-from stixpy.calibration.transmission import Transmission
 from stixpy.calibration.grid import get_grid_transmission
+from stixpy.calibration.livetime import get_livetime_fraction
+from stixpy.calibration.transmission import Transmission
+from stixpy.config.instrument import STIX_INSTRUMENT
+from stixpy.io.readers import read_subc_params
+from stixpy.product.product import L1Product
+
 # from stixpy.calibration.flare_location import estimate_flare_location
 
 __all__ = [
@@ -48,9 +43,10 @@ __all__ = [
     "DetectorMasks",
     "PixelMasks",
     "EnergyEdgeMasks",
-    "calc_count_rate"
+    "calc_count_rate",
 ]
 
+from stixpy.visualisation.plotters import PixelPlotter
 
 quantity_support()
 
@@ -164,6 +160,7 @@ class SpectrogramPlotMixin:
     def plot_spectrogram(
         self,
         axes=None,
+        vtype="dcr",
         time_indices=None,
         energy_indices=None,
         detector_indices="all",
@@ -177,10 +174,23 @@ class SpectrogramPlotMixin:
         ----------
         axes : optional `matplotlib.axes`
             The axes the plot the spectrogram.
+        vtype : str
+           Type of value to return control the default normalisation:
+               * 'c' - count [c]
+               * 'cr' - count rate [c/s]
+               * 'dcr' - differential count rate [c/(s keV)]
         time_indices : `list` or `numpy.ndarray`
             If an 1xN array will be treated as mask if 2XN array will sum data between given
             indices. For example `time_indices=[0, 2, 5]` would return only the first, third and
             sixth times while `time_indices=[[0, 2],[3, 5]]` would sum the data between.
+        pixel_indices : `list` or `numpy.ndarray`
+            If an 1xN array will be treated as mask if 2XN array will sum data between given
+            indices. For example `pixel_indices=[0, 2, 5]` would return only the first, third and
+            sixth pixels while `pixel_indices=[[0, 2],[3, 5]]` would sum the data between.
+        detector_indices : `list` or `numpy.ndarray`
+            If an 1xN array will be treated as mask if 2XN array will sum data between given
+            indices. For example `detector_indices=[0, 2, 5]` would return only the first, third and
+            sixth detectors while `detector_indices=[[0, 2],[3, 5]]` would sum the data between.
         energy_indices : `list` or `numpy.ndarray`
             If an 1xN array will be treated as mask if 2XN array will sum data between given
             indices. For example `energy_indices=[0, 2, 5]` would return only the first, third and
@@ -191,7 +201,17 @@ class SpectrogramPlotMixin:
         Returns
         -------
         `matplotlib.axes`
+
+        Notes
+        -----
+        The units of the plotted data are determined by the `vtype` parameter:
+        - 'c': counts
+        - 'cr': counts per second
+        - 'dcr': counts per second per keV
         """
+        if axes is None:
+            fig, axes = plt.subplots()
+
         counts_shape = self.data["counts"].shape
         if len(counts_shape) != 4:
             # if spectrogram can't do anything with pixel or detector indices
@@ -227,22 +247,19 @@ class SpectrogramPlotMixin:
                     raise ValueError("Spectrogram plots can only one sum detector or summed over a number of detectors")
                 pid = pixel_indices
 
-        counts, errors, times, timedeltas,_, energies, _ = self.get_data(
-            detector_indices=did, pixel_indices=pid, time_indices=time_indices, energy_indices=energy_indices
+        counts, errors, times, timedeltas, _, energies, _ = self.get_data(
+            vtype=vtype,
+            detector_indices=did,
+            pixel_indices=pid,
+            time_indices=time_indices,
+            energy_indices=energy_indices,
         )
-        counts = counts.to(u.ct / u.s / u.keV)
-        errors = errors.to(u.ct / u.s / u.keV)
         timedeltas = timedeltas.to(u.s)
 
         e_edges = np.hstack([energies["e_low"], energies["e_high"][-1]]).value
         t_edges = Time(
             np.concatenate([times - timedeltas.reshape(-1) / 2, times[-1] + timedeltas.reshape(-1)[-1:] / 2])
         )
-
-        if axes is None:
-            fig, axes = plt.subplots()
-        else:
-            fig = axes.get_figure()  # noqa
 
         pcolor_kwargs = {"norm": LogNorm(), "shading": "flat"}
         pcolor_kwargs.update(plot_kwargs)
@@ -272,6 +289,7 @@ class TimesSeriesPlotMixin:
 
     def plot_timeseries(
         self,
+        vtype="dcr",
         time_indices=None,
         energy_indices=None,
         detector_indices="all",
@@ -285,8 +303,11 @@ class TimesSeriesPlotMixin:
 
         Parameters
         ----------
-        axes : optional `matplotlib.axes`
-            The axes the plot the spectrogram.
+        vtype : str
+           Type of value to return control the default normalisation:
+               * 'c' - count [c]
+               * 'cr' - count rate [c/s]
+               * 'dcr' - differential count rate [c/(s keV)]
         time_indices : `list` or `numpy.ndarray`
             If an 1xN array will be treated as mask if 2XN array will sum data between given
             indices. For example `time_indices=[0, 2, 5]` would return only the first, third and
@@ -303,6 +324,8 @@ class TimesSeriesPlotMixin:
             If an 1xN array will be treated as mask if 2XN array will sum data between given
             indices. For example `pixel_indices=[0, 2, 5]` would return only the first, third and
             sixth pixels while `pixel_indices=[[0, 2],[3, 5]]` would sum the data between.
+        axes : optional `matplotlib.axes`
+            The matplotlib axes on which to plot the time series.
         error_bar : optional `bool`
             Add error bars to plot.
         **plot_kwargs : `dict`
@@ -315,8 +338,6 @@ class TimesSeriesPlotMixin:
         """
         if axes is None:
             fig, axes = plt.subplots()
-        else:
-            fig = axes.get_figure()
 
         if detector_indices == "all":
             detector_indices = [[0, 31]]
@@ -324,15 +345,13 @@ class TimesSeriesPlotMixin:
         if pixel_indices == "all":
             pixel_indices = [[0, 11]]
 
-        counts, errors, times, timedeltas,_, energies,_ = self.get_data(
+        counts, errors, times, timedeltas, _, energies, _ = self.get_data(
+            vtype=vtype,
             detector_indices=detector_indices,
             pixel_indices=pixel_indices,
             time_indices=time_indices,
             energy_indices=energy_indices,
         )
-        counts = counts.to(u.ct / u.s / u.keV)
-        errors = errors.to(u.ct / u.s / u.keV)
-        timedeltas = timedeltas.to(u.s)
 
         labels = [f"{el.value} - {eh.value} keV" for el, eh in energies["e_low", "e_high"]]
 
@@ -351,9 +370,7 @@ class TimesSeriesPlotMixin:
                 lines = axes.plot(times.to_datetime(), counts[:, did, pid, eid], label=labels[eid], **plot_kwarg)
 
         axes.set_yscale("log")
-        axes.xaxis.set_major_formatter(DateFormatter("%d %H:%M"))
-        fig.autofmt_xdate()
-        fig.tight_layout()
+        axes.xaxis.set_major_formatter(ConciseDateFormatter(axes.xaxis.get_major_locator()))
 
         return lines
 
@@ -363,435 +380,10 @@ class PixelPlotMixin:
     Pixel plot mixin providing pixel plotting for pixel data.
     """
 
-    def plot_pixels(self, *, kind="pixels", time_indices=None, energy_indices=None, fig=None, cmap=None):
-        """
-        Plot individual pixel data for each detector.
-
-        Parameters
-        ----------
-        kind : `string`         the options: 'pixels', 'errorbar', 'config'
-            This sets the visualization type of the subplots. The data will then be shown in the selected style.
-        time_indices : `list` or `numpy.ndarray`
-            If an 1xN array will be treated as mask if 2XN array will sum data between given
-            indices. For example `time_indices=[0, 2, 5]` would return only the first, third and
-            sixth times while `time_indices=[[0, 2],[3, 5]]` would sum the data between.
-        energy_indices : `list` or `numpy.ndarray`
-            If an 1xN array will be treated as mask if 2XN array will sum data between given
-            indices. For example `energy_indices=[0, 2, 5]` would return only the first, third and
-            sixth times while `energy_indices=[[0, 2],[3, 5]]` would sum the data between.
-        fig : optional `matplotlib.figure`
-            The figure where to which the pixel plot will be added.
-        cmap : `string` | `colormap` optional
-            If the kind is `pixels` a colormap will be shown.
-            String : default colormap name
-            colormap: a custom colormap
-            NOTE: If the color of the special detectors 'cfl', 'bkg' is way above
-            the imaging detectors, the color will be automatically set to white.
-
-        Returns
-        -------
-        `matplotlib.figure`
-            The figure
-        """
-
-        if kind not in ["pixels", "errorbar", "config"]:
-            kind = "pixels"
-
-        if fig:
-            axes = fig.subplots(nrows=4, ncols=8, sharex=True, sharey=True, figsize=(7, 7))
-        else:
-            fig, axes = plt.subplots(nrows=4, ncols=8, sharex=True, sharey=True, figsize=(7, 7))
-
-        counts, count_err, times, dt,_, energies,_ = self.get_data(time_indices=time_indices, energy_indices=energy_indices)
-
-        imaging_mask = np.ones(32, bool)
-        imaging_mask[8:10] = False
-
-        max_counts = counts[:, imaging_mask, :, :].max().value
-        min_counts = counts[:, imaging_mask, :, :].min().value
-
-        norm = plt.Normalize(min_counts, max_counts)  # Needed to select the color values for the pixels plot.
-        det_font = {"weight": "regular", "size": 8}
-        axes_font = {"weight": "regular", "size": 7}
-        quadrant_font = {"weight": "regular", "size": 15}
-
-        # pad counts back to have 12 pixels
-        unit = counts.unit
-        counts_pad = np.full((*counts.shape[:2], 12, counts.shape[-1]), np.nan)
-        counts_pad[..., self.pixel_masks.masks.astype(bool).flatten(), :] = counts
-
-        count_err_pad = np.full((*counts.shape[:2], 12, counts.shape[-1]), np.nan)
-        count_err_pad[..., self.pixel_masks.masks.astype(bool).flatten(), :] = count_err
-
-        counts = counts_pad << unit
-        count_err = count_err_pad << unit
-
-        if cmap is None:
-            clrmap = copy.copy(cm.get_cmap("viridis"))
-            clrmap.set_over("w")
-        elif isinstance(cmap, str):
-            clrmap = copy.copy(cm.get_cmap(cmap))
-        else:
-            clrmap = cmap
-
-        def timeval(val):
-            return times[val].isot
-
-        def energyval(val):
-            return f"{energies[val]['e_low'].value}-{energies[val]['e_high']}"
-
-        def det_pixels_plot(counts, norm, axes, clrmap, fig, last=False):
-            """
-            Shows a plot to visualize the pixel counts; the pixels plot.
-
-            Parameters
-            ----------
-            counts : `List`
-                data collection with the number of counts
-            norm : `function`
-                normalizes the data in the parentheses
-            axes : `matplotlib.axes`
-                the axes in which the data will be plotted
-            clrmap : `colormap`
-                the colormap which will be used to visualize the data/counts
-            fig : `matplotlib.figure`
-                the current figure to use
-
-            Returns
-            -------
-            top: The 4 pixels positioned at the top
-            bottom: The 4 pixels positioned at the bottom
-            small: The 4 small pixels in the middle
-            """
-
-            # Set the variables needed.
-            bar1 = [1, 1, 1, 1]
-            bar2 = [-1, -1, -1, -1]
-            bar3 = [0.2, 0.2, 0.2, 0.2]
-            x_pos = ["A", "B", "C", "D"]
-
-            counts = counts.reshape(3, 4)
-
-            # plot the pixels
-            top = axes.bar(
-                x_pos, bar1, color=clrmap(norm(counts[0, :])), width=1, zorder=1, edgecolor="w", linewidth=0.5
-            )
-            bottom = axes.bar(
-                x_pos, bar2, color=clrmap(norm(counts[1, :])), width=1, zorder=1, edgecolor="w", linewidth=0.5
-            )
-            small = axes.bar(
-                x_pos,
-                bar3,
-                color=clrmap(norm(counts[2, :])),
-                width=-0.5,
-                align="edge",
-                bottom=-0.1,
-                zorder=1,
-                edgecolor="w",
-                linewidth=0.5,
-            )
-
-            # hide most of the axes ticks
-            if last:
-                axes.set_xticks(range(4))
-                axes.set_xticklabels(x_pos)
-                axes.axes.get_xaxis().set_visible(True)
-                axes.axes.get_yaxis().set_visible(False)
-            else:
-                axes.set_xticks([])
-                axes.axes.get_xaxis().set_visible(False)
-                axes.axes.get_yaxis().set_visible(False)
-
-            for i in range(4):
-                top[i].data = counts[0, i]
-                bottom[i].data = counts[1, i]
-                small[i].data = counts[2, i]
-
-            # Create the label annotation
-            annot = axes.annotate(
-                "",
-                xy=(0, 0),
-                xytext=(-60, 20),
-                textcoords="offset points",
-                bbox=dict(boxstyle="round", fc="w"),
-                arrowprops=dict(arrowstyle="-"),
-                zorder=33,
-            )
-
-            annot.set_visible(False)
-
-            # Create a hover function
-            def update_annot(artist, annot):
-                """update tooltip when hovering a given plotted object"""
-                # find the middle of the bar
-                center_x = artist.get_x() + artist.get_width() / 2
-                center_y = artist.get_y() + artist.get_height() / 2
-                annot.xy = (center_x, center_y)
-
-                annot.set_text(artist.data.round(decimals=3))
-                # annot.get_bbox_patch().set_alpha(1)
-
-            def hover(event):
-                """update and show a tooltip while hovering an object; hide it otherwise"""
-                # one wants to hide the annotation only if no artist in the graph is hovered
-                annot.set_visible(False)
-                if isinstance(event.inaxes, type(axes)):
-                    for p in [top, bottom, small]:
-                        for artist in p:
-                            contains, _ = artist.contains(event)
-                            if contains:
-                                update_annot(artist, annot)
-                                annot.set_visible(True)
-                if last:
-                    fig.canvas.draw_idle()
-
-            fig.canvas.mpl_connect("motion_notify_event", hover)
-            return top, bottom, small
-
-        def det_errorbar_plot(counts, count_err, pixel_ids, detector_id, axes):
-            """Shows a plot to visualize the counts; the errorbar plot."""
-            plot_cont = []
-            for pixel_id in pixel_ids:
-                plot_cont.append(
-                    axes.errorbar((0.5, 1.5, 2.5, 3.5), counts[pixel_id], yerr=count_err[pixel_id], xerr=0.5, ls="")
-                )
-            axes.set_xticks([])
-            if detector_id > 0:
-                axes.set_ylabel("")
-            return plot_cont
-
-        def det_config_plot(detector_config, axes, font, detector_id):
-            """Shows a plot with the configurations of the detectors; the config plot."""
-
-            # Create Functions to convert 'Front' and 'Rear Orient'.
-            def mm2deg(x):
-                return x * 360.0 / 1
-
-            def deg2mm(x):
-                return x / 360.0 * 1
-
-            # get the information that will be plotted
-            if detector_config["Phase Sense"] > 0:
-                phase_sense = "+"
-            elif detector_config["Phase Sense"] < 0:
-                phase_sense = "-"
-            else:
-                phase_sense = "n"
-
-            y = [
-                detector_config["Slit Width"],
-                detector_config["Front Pitch"],
-                detector_config["Rear Pitch"],
-                0,
-                deg2mm(detector_config["Front Orient"]),
-                deg2mm(detector_config["Rear Orient"]),
-            ]
-
-            x = np.arange(len(y))
-            color = ["black", "orange", "#1f77b4", "b", "orange", "#1f77b4"]
-
-            # plot the information on axes
-            axes.bar(x, y, color=color)
-            axes.text(x=0.8, y=0.7, s=f"Phase: {phase_sense}", **font)
-            axes.set_ylim(0, 1)
-            axes.axes.get_xaxis().set_visible(False)
-
-            # Create secondary y axis
-            ax2 = axes.secondary_yaxis("right", functions=(mm2deg, deg2mm))
-            ax2.set_yticks([0, 90, 270, 360])
-            ax2.set_yticklabels(["0°", "90°", "270°", "360°"], fontsize=8)
-            ax2.set_visible(False)
-            axes.axes.get_yaxis().set_visible(False)
-
-            # Create axes labeling and legend
-            if detector_id == 0:
-                axes.set_yticks([0, 1])
-                axes.set_ylabel("mm", **font)
-                axes.yaxis.set_label_coords(-0.1, 0.5)
-                axes.axes.get_yaxis().set_visible(True)
-                legend_bars = [Patch(facecolor="orange"), Patch(facecolor="#1f77b4")]
-                axes.legend(legend_bars, ["Front", "Rear"], loc="center right", bbox_to_anchor=(0, 2.5))
-            if detector_id == 31:
-                ax2.set_visible(True)
-                axes.axes.get_xaxis().set_visible(True)
-                axes.set_xticks([0, 1.5, 4.5])
-                axes.set_xticklabels(["Slit Width", "Pitch", "Orientation"], rotation=90)
-                # leave the spaces to set the correct x position of the label!
-                ax2.set_ylabel("               deg °", rotation=0, **font)
-                # x parameter doesn't change anything because it's a secondary
-                # y axis (has only 1 x position).
-                ax2.yaxis.set_label_coords(x=1, y=0.55)
-
-        def colorbar(counts, min_counts, max_counts, clrmap, fig):
-            """
-            Creates a colormap at the left side of the created figure.
-
-            NOTE: If the color of the special detectors 'cfl', 'bkg' is way above
-            the rest, the color will be automatically set to white.
-            """
-
-            norm = colors.Normalize(vmin=min_counts, vmax=max_counts)
-            cax = fig.add_axes([0.05, 0.15, 0.025, 0.8])
-            cbar = plt.colorbar(cm.ScalarMappable(norm=norm, cmap=clrmap), orientation="vertical", cax=cax)
-            cbar.ax.set_title(f"{str(counts.unit)}", rotation=90, x=-0.8, y=0.4)
-
-        def instrument_layout(fig, font):
-            """Shows the layout of the instrument to make it easier to locate the detectors."""
-            x = [0, 2]
-            y = [1, 1]
-            fig.add_axes([0.06, 0.055, 0.97, 0.97])
-            plt.plot(x, y, c="b")
-            plt.plot(y, x, c="b")
-            plt.axis("off")
-            fig.add_axes([0.09, 0.08, 0.91, 0.92])
-            draw_circle_1 = plt.Circle((0.545, 0.540), 0.443, color="b", alpha=0.1)
-            draw_circle_2 = plt.Circle((0.545, 0.540), 0.07, color="#2b330b", alpha=0.95)
-            fig.add_artist(draw_circle_1)
-            fig.add_artist(draw_circle_2)
-            plt.axis("off")
-
-            # Label the quandrants of the instrument
-            fig.add_axes([0, 0, 1, 1])
-            plt.text(0.19, 0.89, "Q1", **font)
-            plt.text(0.19, 0.17, "Q2", **font)
-            plt.text(0.86, 0.17, "Q3", **font)
-            plt.text(0.86, 0.89, "Q4", **font)
-            plt.axis("off")
-
-        instrument_layout(fig, quadrant_font)  # Call the instrument layout
-
-        # Create the energy and time slider add the bottom of the figure
-        axcolor = "lightgoldenrodyellow"
-        axenergy = plt.axes([0.15, 0.05, 0.55, 0.03], facecolor=axcolor)
-        senergy = SliderCustomValue(
-            ax=axenergy, label="Energy", valmin=0, valmax=len(energies) - 1, format_func=energyval, valinit=0, valstep=1
-        )
-        axetime = plt.axes([0.15, 0.01, 0.55, 0.03], facecolor=axcolor)
-        stime = SliderCustomValue(
-            ax=axetime, label="Time", valmin=0, valmax=counts.shape[0] - 1, format_func=timeval, valinit=1, valstep=1
-        )
-
-        pixel_ids = [slice(0, 4), slice(4, 8), slice(8, 12)]
-        if counts.shape[2] == 4:
-            pixel_ids = [slice(0, 4)]
-
-        containers = defaultdict(list)
-
-        xnorm = plt.Normalize(SubCollimatorConfig["SC Xcen"].min() * 1.5, SubCollimatorConfig["SC Xcen"].max() * 1.5)
-        ynorm = plt.Normalize(SubCollimatorConfig["SC Ycen"].min() * 1.4, SubCollimatorConfig["SC Ycen"].max() * 1.4)
-        if kind == "pixels":
-            colorbar(counts, min_counts, max_counts, clrmap, fig)
-
-        # plot the layout of the 32 detectors
-        for detector_id in range(32):
-            row, col = divmod(detector_id, 8)
-            plot_cont = object
-            if kind == "pixels":
-                plot_cont = det_pixels_plot(
-                    counts[0, detector_id, :, 0], norm, axes[row, col], clrmap, fig, last=(detector_id == 31)
-                )
-            elif kind == "errorbar":
-                plot_cont = det_errorbar_plot(
-                    counts[0, detector_id, :, 0],
-                    count_err[0, detector_id, :, 0],
-                    pixel_ids,
-                    detector_id,
-                    axes[row, col],
-                )
-            elif kind == "config":
-                plot_cont = det_config_plot(SubCollimatorConfig[detector_id], axes[row, col], axes_font, detector_id)
-
-            axes[row, col].set_zorder(100)
-
-            # set the custom position of the detectors
-            axes[row, col].set_position(
-                [
-                    xnorm(SubCollimatorConfig["SC Xcen"][detector_id]),
-                    ynorm(SubCollimatorConfig["SC Ycen"][detector_id]),
-                    1 / 11.0,
-                    1 / 11.0,
-                ]
-            )
-
-            containers[row, col].append(plot_cont)
-            axes[row, col].set_title(f"Det {SubCollimatorConfig['Grid Label'][detector_id]}", y=0.89, **det_font)
-
-        def update_void(_):
-            """get the value as this will update the slider"""
-            _ = senergy.val
-            _ = stime.val
-
-        def update_pixels(_):
-            """Update the value of the pixels plot when the energy and time slider is being used."""
-            energy_index = senergy.val
-            time_index = stime.val
-
-            for detector_id in range(32):
-                row, col = divmod(detector_id, 8)
-                cnts = counts[time_index, detector_id, :, energy_index]
-                top, bottom, small = containers[row, col][0]
-                cnts = cnts.reshape([3, 4])
-                for pix_artist, pix in zip(range(4), range(12)):
-                    norm_counts = norm(cnts[0][pix].value)
-                    top[pix_artist].set_color(clrmap(norm_counts))
-                    top[pix_artist].data = cnts[0][pix]
-                    top[pix_artist].set_edgecolor("w")
-
-                    norm_counts = norm(cnts[1][pix].value)
-                    bottom[pix_artist].set_color(clrmap(norm_counts))
-                    bottom[pix_artist].data = cnts[1][pix]
-                    bottom[pix_artist].set_edgecolor("w")
-
-                    norm_counts = norm(cnts[2][pix].value)
-                    small[pix_artist].set_color(clrmap(norm_counts))
-                    small[pix_artist].data = cnts[2][pix]
-                    small[pix_artist].set_edgecolor("w")
-
-        def update_errorbar(_):
-            """Update the errorbar plot when the energy and time slider is being used."""
-            energy_index = senergy.val
-            time_index = stime.val
-            pids_ = [slice(0, 4), slice(4, 8), slice(8, 12)]
-            if counts.shape[2] == 4:
-                pids_ = [slice(0, 4)]
-
-            for did in range(32):
-                r, c = divmod(did, 8)
-                axes[r, c].set_ylim(0, np.nanmax(counts[time_index, imaging_mask, :, energy_index]) * 1.2)
-
-                for i, pid in enumerate(pids_):
-                    lines, caps, bars = containers[r, c][0][i]
-                    lines.set_ydata(counts[time_index, did, pid, energy_index])
-
-                    # horizontal bars at value
-                    segs = np.array(bars[0].get_segments())
-                    if segs.size > 0:
-                        segs[:, 0, 0] = [0.0, 1.0, 2.0, 3.0]
-                        segs[:, 1, 0] = [1.0, 2.0, 3.0, 4.0]
-                        segs[:, 0, 1] = counts[time_index, did, pid, energy_index]
-                        segs[:, 1, 1] = counts[time_index, did, pid, energy_index]
-                        bars[0].set_segments(segs)
-                        # vertical bars at +/- error
-                        segs = np.array(bars[1].get_segments())
-                        segs[:, 0, 0] = [0.5, 1.5, 2.5, 3.5]
-                        segs[:, 1, 0] = [0.5, 1.5, 2.5, 3.5]
-                        segs[:, 0, 1] = (
-                            counts[time_index, did, pid, energy_index] - count_err[time_index, did, pid, energy_index]
-                        )
-                        segs[:, 1, 1] = (
-                            counts[time_index, did, pid, energy_index] + count_err[time_index, did, pid, energy_index]
-                        )
-                        bars[1].set_segments(segs)
-
-        update_function = update_pixels
-        if kind == "config":
-            update_function = update_void
-        elif kind == "errorbar":
-            update_function = update_errorbar
-
-        # Call the update functions
-        senergy.on_changed(update_function)
-        stime.on_changed(update_function)
+    def plot_pixels(self, *, kind="pixel", time_indices=None, energy_indices=None, fig=None, cmap=None, **kwargs):
+        pixel_plotter = PixelPlotter(self, time_indices=time_indices, energy_indices=energy_indices)
+        pixel_plotter.plot(kind=kind, fig=fig, cmap=cmap, **kwargs)
+        return pixel_plotter
 
 
 class ScienceData(L1Product):
@@ -804,7 +396,7 @@ class ScienceData(L1Product):
 
         Parameters
         ----------
-        header : `astropy.fits.Header`
+        meta : `astropy.fits.Header`
             Fits header
         control : `astropy.table.QTable`
             Fits file control extension
@@ -862,29 +454,44 @@ class ScienceData(L1Product):
         return self.data["time"]
 
     @property
+    @deprecated(name="duration", since="0.2", message="Use `durations` instead", warning_type=DeprecationWarning)
     def duration(self):
         """
-        An `astropy.units.Quantiy` array giving the duration or integration time
+        An `astropy.units.Quantity` array giving the duration or integration time
+        """
+        return self.data["timedel"]
+
+    @property
+    def durations(self):
+        """
+        An `astropy.units.Quantity` array giving the duration or integration time
         """
         return self.data["timedel"]
 
     def get_data(
         self,
+        *,
+        vtype="dcr",
         time_indices=None,
         energy_indices=None,
         detector_indices=None,
         pixel_indices=None,
         sum_all_times=False,
         livetime_correction=True,
-        elut_correction=True
+        elut_correction=True,
     ):
-        """
+        r"""
         Return the counts, errors, times, durations and energies for selected data.
 
         Optionally summing in time and or energy.
 
         Parameters
         ----------
+        vtype : str
+            Type of value to return (vtype) controls the normalisation:
+                * 'c' - count [c]
+                * 'cr' - count rate [c/s]
+                * 'dcr' - differential count rate [c/(s keV)]
         time_indices : `list` or `numpy.ndarray`
             If an 1xN array will be treated as mask if 2XN array will sum data between given
             indices. For example `time_indices=[0, 2, 5]` would return only the first, third and
@@ -915,7 +522,7 @@ class ScienceData(L1Product):
         t_norm = self.data["timedel"]
 
         # print('time_dels = ',t_norm)
-        
+
         counts = self.data["counts"]
 
         # print('counts = ',np.shape(counts))
@@ -929,50 +536,46 @@ class ScienceData(L1Product):
         # print('shape_counts = ',np.shape(counts_var) )
 
         if livetime_correction:
-
             trigger_to_detector = STIX_INSTRUMENT.subcol_adc_mapping
             triggers = self.data["triggers"][:, trigger_to_detector].astype(float)[...]
-            
+
             triggers_error = self.data["triggers_comp_err"][:, trigger_to_detector].astype(float)[...]
             triggers_lower = triggers - triggers_error
-            triggers_upper = triggers + triggers_error            
-            
-            _, livefrac, _ = get_livetime_fraction(triggers/ self.data["timedel"].to("s").reshape(-1, 1))
-            _, livefrac_lower, _ = get_livetime_fraction(triggers_lower/ self.data["timedel"].to("s").reshape(-1, 1))
-            _, livefrac_upper, _ = get_livetime_fraction(triggers_upper/ self.data["timedel"].to("s").reshape(-1, 1))
+            triggers_upper = triggers + triggers_error
+
+            _, livefrac, _ = get_livetime_fraction(triggers / self.data["timedel"].to("s").reshape(-1, 1))
+            _, livefrac_lower, _ = get_livetime_fraction(triggers_lower / self.data["timedel"].to("s").reshape(-1, 1))
+            _, livefrac_upper, _ = get_livetime_fraction(triggers_upper / self.data["timedel"].to("s").reshape(-1, 1))
 
             # if t_norm.size != 1:
 
             t_norm = t_norm.reshape(-1, 1, 1, 1)
             livefrac = livefrac.reshape(livefrac.shape + (1, 1))
             livefrac_lower = livefrac_lower.reshape(livefrac_lower.shape + (1, 1))
-            livefrac_upper = livefrac_upper.reshape(livefrac_upper.shape + (1, 1))             
- 
-            t_norm_original = t_norm
+            livefrac_upper = livefrac_upper.reshape(livefrac_upper.shape + (1, 1))
+
+            # t_norm_original = t_norm
 
             t_norm = t_norm * livefrac
             t_norm_lower = t_norm * livefrac_lower
             t_norm_upper = t_norm * livefrac_upper
 
             # print('tnorm = ',t_norm)
-        
+
         # print('td*lf = ',t_norm.mean(axis=1).squeeze())
         # print('lf = ',np.shape(livefrac))
 
         if elut_correction:
-
-            _, _, elut_cor_fac = get_elut_correction(np.array(self.energies['channel']), self)
+            _, _, elut_cor_fac = get_elut_correction(np.array(self.energies["channel"]), self)
 
             # print('elut_corr_fac = ', elut_cor_fac)
             e_norm_energies = e_norm
             e_norm = e_norm / elut_cor_fac
-        
+
         else:
             e_norm_energies = e_norm
             elut_cor_fac = 1
 
-
-    
         if len(shape) < 4:
             counts = counts.reshape(shape[0], 1, 1, shape[-1])
             counts_var = counts_var.reshape(shape[0], 1, 1, shape[-1])
@@ -1005,9 +608,10 @@ class ScienceData(L1Product):
             if pixel_indices.ndim == 1:
                 pixel_mask = np.full(12, False)
                 pixel_mask[pixel_indices] = True
-                counts = counts[..., pixel_mask, :]
-                counts_var = counts_var[..., pixel_mask, :]
-                t_norm = t_norm[...,pixel_mask,:]
+                num_pixels = counts.shape[2]
+                counts = counts[..., pixel_mask[:num_pixels], :]
+                counts_var = counts_var[..., pixel_mask[:num_pixels], :]
+                t_norm = t_norm[..., pixel_mask, :]
             elif pixel_indices.ndim == 2:
                 counts = np.concatenate(
                     [np.sum(counts[..., pl : ph + 1, :], axis=2, keepdims=True) for pl, ph in pixel_indices], axis=2
@@ -1016,7 +620,6 @@ class ScienceData(L1Product):
                 counts_var = np.concatenate(
                     [np.sum(counts_var[..., pl : ph + 1, :], axis=2, keepdims=True) for pl, ph in pixel_indices], axis=2
                 )
-
 
         if energy_indices is not None:
             energy_indices = np.asarray(energy_indices)
@@ -1046,7 +649,6 @@ class ScienceData(L1Product):
                     ]
                 )
                 energies = QTable(energies * u.keV, names=["e_low", "e_high"])
-
 
         if time_indices is not None:
             time_indices = np.asarray(time_indices)
@@ -1083,113 +685,119 @@ class ScienceData(L1Product):
                     counts_var = np.sum(counts_var, axis=0, keepdims=True)
                     t_norm = np.sum(dt)
 
+        t_norm = t_norm.to("s")
+
+        if vtype == "c":
+            norm = 1
+        elif vtype == "cr":
+            norm = 1 / t_norm
+        elif vtype == "dcr":
+            norm = 1 / (e_norm * t_norm)
+        else:
+            raise ValueError("vtype must be one of 'c', 'cr', 'dcr'.")
+
+        counts_err = np.sqrt(counts * u.ct + counts_var) * norm
+        counts = counts * norm
+
         if e_norm.size != 1:
             e_norm_energies = e_norm_energies.reshape(1, 1, 1, -1)
             e_norm = e_norm.reshape(1, 1, 1, -1)
 
         if np.isnan(np.array(e_norm.value)).any():
-
             valid_mask = np.flatnonzero(~np.isnan(e_norm))
- 
-            e_norm_energies = e_norm_energies[...,valid_mask]
-            e_norm = e_norm[...,valid_mask]
-            counts = counts[...,valid_mask]
-            counts_var = counts_var[...,valid_mask]
+
+            e_norm_energies = e_norm_energies[..., valid_mask]
+            e_norm = e_norm[..., valid_mask]
+            counts = counts[..., valid_mask]
+            counts_var = counts_var[..., valid_mask]
 
             if elut_correction:
                 elut_cor_fac = elut_cor_fac[valid_mask]
 
             energies = energies[valid_mask]
 
-        counts_err = np.sqrt(counts*u.ct + counts_var) 
+        counts_err = np.sqrt(counts * u.ct + counts_var)
 
         counts_corr = counts / (e_norm * t_norm)
 
         counts_lower = counts / (t_norm_lower)
         counts_upper = counts / (t_norm_upper)
 
-        livetime_error = (counts_upper - counts_lower)  / 2
+        livetime_error = (counts_upper - counts_lower) / 2
 
-
-
-        counts_err = np.sqrt(((counts_err/t_norm)**2) + (livetime_error**2)) / (e_norm) 
-
+        counts_err = np.sqrt(((counts_err / t_norm) ** 2) + (livetime_error**2)) / (e_norm)
 
         return counts_corr, counts_err, times, t_norm, livefrac, energies, elut_cor_fac
-        
-    
+
     def get_spectrum(self, bkg_prod=None):
-        
-        det_indices_top24 =  np.array([0, 1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 19, 
-                                     20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31])
-        
-        det_indices_full = np.where(self.detector_masks.__dict__['masks'] == 1 )[1]
 
-        det_indices = [d for i,d in enumerate(det_indices_top24) if d in det_indices_full]
+        det_indices_top24 = np.array(
+            [0, 1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]
+        )
 
-        pix_indices = np.where(self.pixel_masks.__dict__['masks'] == 1 )[1]
+        det_indices_full = np.where(self.detector_masks.__dict__["masks"] == 1)[1]
+
+        det_indices = [d for i, d in enumerate(det_indices_top24) if d in det_indices_full]
+
+        pix_indices = np.where(self.pixel_masks.__dict__["masks"] == 1)[1]
 
         rate, rate_err, times, t_norm_cs, livefrac, energies, elut_cor_fac = self.get_data()
 
         # energies = self.energies
 
-        de = np.array(energies['e_high'] - energies['e_low']) * u.keV
-
+        de = np.array(energies["e_high"] - energies["e_low"]) * u.keV
 
         t_diff = t_norm_cs.to(u.s)
 
         counts_kev = rate * t_norm_cs
         counts = counts_kev * de
 
-        dt = (t_diff / livefrac)
+        dt = t_diff / livefrac
         dt = dt.squeeze().mean(axis=1)
 
         result_count_rate_full = counts
         result_count_rate_det = result_count_rate_full[:, det_indices, :, :]
-        result_count_rate_det_pix =   result_count_rate_det[:, :, pix_indices, :]
-        result_count_rate = result_count_rate_det_pix.sum(axis=(1,2)) 
+        result_count_rate_det_pix = result_count_rate_det[:, :, pix_indices, :]
+        result_count_rate = result_count_rate_det_pix.sum(axis=(1, 2))
 
         result_count_rate_full_corr = counts / livefrac
         result_count_rate_det_corr = result_count_rate_full_corr[:, det_indices, :, :]
-        result_count_rate_det_pix_corr =   result_count_rate_det_corr[:, :, pix_indices, :]
-        result_count_rate_corr = result_count_rate_det_pix_corr.sum(axis=(1,2)) 
+        result_count_rate_det_pix_corr = result_count_rate_det_corr[:, :, pix_indices, :]
+        result_count_rate_corr = result_count_rate_det_pix_corr.sum(axis=(1, 2))
 
-        counts_err_kev = rate_err *  t_norm_cs
+        counts_err_kev = rate_err * t_norm_cs
         counts_err = counts_err_kev * de
         result_count_err_rate_full = counts_err / livefrac
-        result_count_err_rate_det =result_count_err_rate_full[:, det_indices, :, :]
-        result_count_err_rate_det_pix =result_count_err_rate_det[:, :, pix_indices, :]
-        result_count_err_rate = np.sqrt(((result_count_err_rate_det_pix**2).sum(axis=(1,2)) ) ) 
+        result_count_err_rate_det = result_count_err_rate_full[:, det_indices, :, :]
+        result_count_err_rate_det_pix = result_count_err_rate_det[:, :, pix_indices, :]
+        result_count_err_rate = np.sqrt((result_count_err_rate_det_pix**2).sum(axis=(1, 2)))
 
         if bkg_prod:
-
-            rate_bkg, rate_err_bkg, times_bkg, t_norm_cs_bkg, livefrac_bkg, energies_bkg, _ = bkg_prod.get_data(elut_correction=False)
+            rate_bkg, rate_err_bkg, times_bkg, t_norm_cs_bkg, livefrac_bkg, energies_bkg, _ = bkg_prod.get_data(
+                elut_correction=False
+            )
 
             # energies_bkg = bkg_prod.energies
 
-            de_bkg = np.array(energies_bkg['e_high'] - energies_bkg['e_low']) * u.keV
+            de_bkg = np.array(energies_bkg["e_high"] - energies_bkg["e_low"]) * u.keV
 
             t_diff_bkg = t_norm_cs_bkg.to(u.s)
 
-            dt_bkg = (t_diff_bkg / livefrac_bkg)
+            dt_bkg = t_diff_bkg / livefrac_bkg
 
-            _, _, indices_sub = np.intersect1d(
-                energies['e_low'],
-                energies_bkg['e_low'],
-                return_indices=True
-            )
+            _, _, indices_sub = np.intersect1d(energies["e_low"], energies_bkg["e_low"], return_indices=True)
 
             # print('ind_sub = ',indices_sub)
             # print('e = ',energies['e_low'])
-            # print('ebkg = ',energies_bkg['e_low']) 
-            # print('ebkg_ind = ',energies_bkg['e_low'][indices_sub])       
+            # print('ebkg = ',energies_bkg['e_low'])
+            # print('ebkg_ind = ',energies_bkg['e_low'][indices_sub])
 
-            rate_bkg = rate_bkg[:,:,:,indices_sub] * elut_cor_fac
-            rate_err_bkg = rate_err_bkg[:,:,:,indices_sub]* elut_cor_fac
+            rate_bkg = rate_bkg[:, :, :, indices_sub] * elut_cor_fac
+            rate_err_bkg = rate_err_bkg[:, :, :, indices_sub] * elut_cor_fac
             de_bkg = de_bkg[indices_sub]
 
-            counts_kev_bkg  = rate_bkg  * t_norm_cs_bkg 
-            counts_bkg  = counts_kev_bkg  * de_bkg 
+            counts_kev_bkg = rate_bkg * t_norm_cs_bkg
+            counts_bkg = counts_kev_bkg * de_bkg
 
             # dt = dt.squeeze().mean(axis=1)
             dt_bkg = dt_bkg.squeeze()
@@ -1197,140 +805,132 @@ class ScienceData(L1Product):
             # print('dt_bkg =',dt_bkg.shape)
             # print('dt_shape =',dt.shape)
             # result_count_rate_full_bkg  = (counts_bkg /  dt_bkg) * dt
-            result_count_rate_full_bkg  = counts_bkg
-            result_count_rate_det_bkg  = result_count_rate_full_bkg[:, det_indices, :, :]
-            result_count_rate_det_pix_bkg  =  result_count_rate_det_bkg[:, :, pix_indices, :]
-            result_count_rate_bkg  = result_count_rate_det_pix_bkg.sum(axis=(1,2)) 
+            result_count_rate_full_bkg = counts_bkg
+            result_count_rate_det_bkg = result_count_rate_full_bkg[:, det_indices, :, :]
+            result_count_rate_det_pix_bkg = result_count_rate_det_bkg[:, :, pix_indices, :]
+            result_count_rate_bkg = result_count_rate_det_pix_bkg.sum(axis=(1, 2))
             step = result_count_rate_bkg.sum(axis=0) / dt_bkg.mean()
-            result_count_rate_bkg = dt.reshape(len(dt),1) * step.reshape(1,len(step))  
+            result_count_rate_bkg = dt.reshape(len(dt), 1) * step.reshape(1, len(step))
 
             # result_count_rate_full_corr_bkg  = (counts_bkg  / (livefrac_bkg * dt_bkg)) * dt
-            result_count_rate_full_corr_bkg  = counts_bkg / livefrac_bkg
+            result_count_rate_full_corr_bkg = counts_bkg / livefrac_bkg
             result_count_rate_det_corr_bkg = result_count_rate_full_corr_bkg[:, det_indices, :, :]
-            result_count_rate_det_pix_corr_bkg =   result_count_rate_det_corr_bkg[:, :, pix_indices, :]
-            result_count_rate_corr_bkg = result_count_rate_det_pix_corr_bkg.sum(axis=(1,2)) 
+            result_count_rate_det_pix_corr_bkg = result_count_rate_det_corr_bkg[:, :, pix_indices, :]
+            result_count_rate_corr_bkg = result_count_rate_det_pix_corr_bkg.sum(axis=(1, 2))
             step_corr = result_count_rate_corr_bkg.sum(axis=0) / dt_bkg.mean()
-            result_count_rate_corr_bkg = dt.reshape(len(dt),1) * step_corr.reshape(1,len(step))  
+            result_count_rate_corr_bkg = dt.reshape(len(dt), 1) * step_corr.reshape(1, len(step))
 
-            counts_err_kev_bkg = rate_err_bkg *  t_norm_cs_bkg
+            counts_err_kev_bkg = rate_err_bkg * t_norm_cs_bkg
             counts_err_bkg = counts_err_kev_bkg * de_bkg
 
             result_count_err_rate_full_bkg = counts_err_bkg
-            result_count_err_rate_det_bkg =result_count_err_rate_full_bkg[:, det_indices, :, :]
-            result_count_err_rate_det_pix_bkg =result_count_err_rate_det_bkg[:, :, pix_indices, :]
-            result_count_err_rate_bkg = np.sqrt(((result_count_err_rate_det_pix_bkg**2).sum(axis=(1,2)) ) )
+            result_count_err_rate_det_bkg = result_count_err_rate_full_bkg[:, det_indices, :, :]
+            result_count_err_rate_det_pix_bkg = result_count_err_rate_det_bkg[:, :, pix_indices, :]
+            result_count_err_rate_bkg = np.sqrt((result_count_err_rate_det_pix_bkg**2).sum(axis=(1, 2)))
             step_err = np.sqrt((result_count_err_rate_bkg**2).sum(axis=0)) / dt_bkg.mean()
-            result_count_err_rate_bkg = dt.reshape(len(dt),1) * step_err.reshape(1,len(step))   
+            result_count_err_rate_bkg = dt.reshape(len(dt), 1) * step_err.reshape(1, len(step))
 
             result_count_err_rate_full_corr_bkg = counts_err_bkg / livefrac_bkg
-            result_count_err_rate_det_corr_bkg =result_count_err_rate_full_corr_bkg[:, det_indices, :, :]
-            result_count_err_rate_det_corr_pix_bkg =result_count_err_rate_det_corr_bkg[:, :, pix_indices, :]
-            result_count_err_rate_bkg_corr = np.sqrt(((result_count_err_rate_det_corr_pix_bkg**2).sum(axis=(1,2)) ) )
+            result_count_err_rate_det_corr_bkg = result_count_err_rate_full_corr_bkg[:, det_indices, :, :]
+            result_count_err_rate_det_corr_pix_bkg = result_count_err_rate_det_corr_bkg[:, :, pix_indices, :]
+            result_count_err_rate_bkg_corr = np.sqrt((result_count_err_rate_det_corr_pix_bkg**2).sum(axis=(1, 2)))
             step_err_corr = np.sqrt((result_count_err_rate_bkg_corr**2).sum(axis=0)) / dt_bkg.mean()
-            result_count_err_rate_bkg_corr = dt.reshape(len(dt),1) * step_err_corr.reshape(1,len(step)) 
+            result_count_err_rate_bkg_corr = dt.reshape(len(dt), 1) * step_err_corr.reshape(1, len(step))
 
             spec_in_corr = result_count_rate_corr - result_count_rate_corr_bkg
             spec_in = result_count_rate - result_count_rate_bkg
 
-            spec_in_corr_err = np.sqrt(result_count_err_rate**2 + result_count_err_rate_bkg**2) 
+            spec_in_corr_err = np.sqrt(result_count_err_rate**2 + result_count_err_rate_bkg**2)
 
             spec_in_corr_lvt = result_count_rate_corr
             spec_in_lvt = result_count_rate
-            spec_in_corr_err_lvt= result_count_err_rate
+            # spec_in_corr_err_lvt = result_count_err_rate
 
-            if energies['e_low'][0].value == 0:
-
-                spec_in = spec_in[:,1:]
-                spec_in_corr = spec_in_corr[:,1:]
-                spec_in_corr_err = spec_in_corr_err[:,1:]
+            if energies["e_low"][0].value == 0:
+                spec_in = spec_in[:, 1:]
+                spec_in_corr = spec_in_corr[:, 1:]
+                spec_in_corr_err = spec_in_corr_err[:, 1:]
                 energies = energies[1:]
 
         else:
-
             spec_in_corr = result_count_rate_corr
             spec_in = result_count_rate
-            spec_in_corr_err= result_count_err_rate
+            spec_in_corr_err = result_count_err_rate
 
             spec_in_corr_lvt = result_count_rate_corr
             spec_in_lvt = result_count_rate
-            spec_in_corr_err_lvt= result_count_err_rate
+            # spec_in_corr_err_lvt = result_count_err_rate
 
-
-            if energies['e_low'][0].value == 0:
-
-                spec_in = spec_in[:,1:]
-                spec_in_corr = spec_in_corr[:,1:]
-                spec_in_corr_err = spec_in_corr_err[:,1:]
+            if energies["e_low"][0].value == 0:
+                spec_in = spec_in[:, 1:]
+                spec_in_corr = spec_in_corr[:, 1:]
+                spec_in_corr_err = spec_in_corr_err[:, 1:]
                 energies = energies[1:]
-        
-        t_diff = t_diff[:,det_indices].mean(axis=1).squeeze()
+
+        t_diff = t_diff[:, det_indices].mean(axis=1).squeeze()
 
         # eff_livefrac = result_count_rate.sum(axis=(1))  / result_count_rate_corr.sum(axis=(1))
-        #  
+        #
 
-        eff_livefrac = spec_in_lvt.sum(axis=(1))  / spec_in_corr_lvt.sum(axis=(1)) 
+        eff_livefrac = spec_in_lvt.sum(axis=(1)) / spec_in_corr_lvt.sum(axis=(1))
 
         # eff_livefrac = spec_in.sum(axis=(1)
 
-        spec_in_final = spec_in_corr * eff_livefrac[:,None]
-        spec_in_corr_err_final = spec_in_corr_err * eff_livefrac[:,None]
+        spec_in_final = spec_in_corr * eff_livefrac[:, None]
+        spec_in_corr_err_final = spec_in_corr_err * eff_livefrac[:, None]
 
         # dt = dt.squeeze().mean(axis=1)
 
-        data_dictionary = {'rate':spec_in_final,
-                        'rate_err':spec_in_corr_err_final,
-                        'times':times,
-                        'time_bin':dt,
-                        'livefrac':eff_livefrac,
-                        'energies':energies}
+        data_dictionary = {
+            "rate": spec_in_final,
+            "rate_err": spec_in_corr_err_final,
+            "times": times,
+            "time_bin": dt,
+            "livefrac": eff_livefrac,
+            "energies": energies,
+        }
 
+        return data_dictionary
 
-        return data_dictionary    
-
-
-    def get_spec_obj(self,event_time_range,flare_angle,srm_dictionary=None,bkg_data=None,flare_location=None):
-
+    def get_spec_obj(self, event_time_range, flare_angle, srm_dictionary=None, bkg_data=None, flare_location=None):
 
         if not bkg_data:
-
             data_dict = self.get_spectrum()
-            counts_axis = np.concatenate([data_dict['energies']['e_low'],[data_dict['energies']['e_high'][-1]]]) 
-            
-            de = np.diff(counts_axis)[np.newaxis,:]
-            dt = data_dict['time_bin'][:, np.newaxis]
+            counts_axis = np.concatenate([data_dict["energies"]["e_low"], [data_dict["energies"]["e_high"][-1]]])
 
-            times_full = data_dict['times']
- 
+            # de = np.diff(counts_axis)[np.newaxis, :]
+            # dt = data_dict["time_bin"][:, np.newaxis]
 
-            counts = data_dict['rate'] 
-            counts_uncertainity = data_dict['rate_err'] 
+            times_full = data_dict["times"]
 
-            times_start = times_full - (data_dict['time_bin']/2)           
-            times_end = times_full + (data_dict['time_bin']/2)
+            counts = data_dict["rate"]
+            counts_uncertainity = data_dict["rate_err"]
 
-            inds = np.where( (times_start >= Time(event_time_range[0]) ) & (times_end <= Time(event_time_range[-1]) ) )[0]
+            times_start = times_full - (data_dict["time_bin"] / 2)
+            times_end = times_full + (data_dict["time_bin"] / 2)
+
+            inds = np.where((times_start >= Time(event_time_range[0])) & (times_end <= Time(event_time_range[-1])))[0]
 
             # print('len inds = ', len(inds))
 
             counts_final = counts[inds].sum(axis=0)
-            counts_uncertainity_final = np.sqrt((counts_uncertainity[inds]**2).sum(axis=0))
+            counts_uncertainity_final = np.sqrt((counts_uncertainity[inds] ** 2).sum(axis=0))
 
             counts_uncertainity_pu = PoissonUncertainty(counts_uncertainity_final)
-            counts_spectral_axis = SpectralAxis(counts_axis, bin_specification='edges')
+            counts_spectral_axis = SpectralAxis(counts_axis, bin_specification="edges")
 
-            t_norm = data_dict['time_bin'][inds] * data_dict['livefrac'][inds]
+            t_norm = data_dict["time_bin"][inds] * data_dict["livefrac"][inds]
 
-        else:            
-
+        else:
             data_dict = self.get_spectrum(bkg_prod=bkg_data)
-            counts_axis = np.concatenate([data_dict['energies']['e_low'],[data_dict['energies']['e_high'][-1]]]) 
+            counts_axis = np.concatenate([data_dict["energies"]["e_low"], [data_dict["energies"]["e_high"][-1]]])
 
-            de = np.diff(counts_axis)[np.newaxis, :]
-            dt = data_dict['time_bin'][:, np.newaxis]
+            # de = np.diff(counts_axis)[np.newaxis, :]
+            # dt = data_dict["time_bin"][:, np.newaxis]
 
-            times_full = data_dict['times']
- 
-            counts = data_dict['rate']
+            times_full = data_dict["times"]
+
+            counts = data_dict["rate"]
 
             # print('ct_check_prev = ',len(counts[counts<0]))
 
@@ -1339,18 +939,18 @@ class ScienceData(L1Product):
             # print('ct_shape = ',counts.shape)
             # print('ct_check_post = ',len(counts[counts<0]))
 
-            counts_uncertainity = data_dict['rate_err'] 
+            counts_uncertainity = data_dict["rate_err"]
 
-            times_start = times_full - (data_dict['time_bin']/2)           
-            times_end = times_full + (data_dict['time_bin']/2)
+            times_start = times_full - (data_dict["time_bin"] / 2)
+            times_end = times_full + (data_dict["time_bin"] / 2)
 
-            inds = np.where( (times_start >= Time(event_time_range[0]) ) & (times_end <= Time(event_time_range[-1]) ) )[0]
-      
+            inds = np.where((times_start >= Time(event_time_range[0])) & (times_end <= Time(event_time_range[-1])))[0]
+
             counts_final = counts[inds].sum(axis=0)
-            counts_uncertainity_final = np.sqrt((counts_uncertainity[inds]**2).sum(axis=0))
+            counts_uncertainity_final = np.sqrt((counts_uncertainity[inds] ** 2).sum(axis=0))
 
-            e_low = data_dict['energies']['e_low'].value
-            energy_conditions = [e_low < 7, (e_low < 10) & (e_low >= 7), e_low>= 10]
+            e_low = data_dict["energies"]["e_low"].value
+            energy_conditions = [e_low < 7, (e_low < 10) & (e_low >= 7), e_low >= 10]
             percentage = [0.07, 0.05, 0.03]
 
             systematic_err_percentage = np.select(energy_conditions, percentage)
@@ -1360,20 +960,19 @@ class ScienceData(L1Product):
             # Calculating systematic error
             systematic_err = systematic_err_percentage * counts_final
 
-            counts_err_final_final = np.sqrt(counts_uncertainity_final**2 + systematic_err**2)            
+            counts_err_final_final = np.sqrt(counts_uncertainity_final**2 + systematic_err**2)
 
             counts_uncertainity_pu = PoissonUncertainty(counts_err_final_final)
-            counts_spectral_axis = SpectralAxis(counts_axis, bin_specification='edges')
-    
-            t_norm = data_dict['time_bin'][inds] * data_dict['livefrac'][inds]
+            counts_spectral_axis = SpectralAxis(counts_axis, bin_specification="edges")
 
+            t_norm = data_dict["time_bin"][inds] * data_dict["livefrac"][inds]
 
         if not srm_dictionary:
-            srm_dict = self.get_masked_srm(flare_location=flare_location) 
+            srm_dict = self.get_masked_srm(flare_location=flare_location)
         else:
-            srm_dict=srm_dictionary
+            srm_dict = srm_dictionary
 
-        distance = (self.meta['DSUN_OBS'] * u.m).to(u.AU) 
+        distance = (self.meta["DSUN_OBS"] * u.m).to(u.AU)
 
         meta = NDMeta()
 
@@ -1391,63 +990,60 @@ class ScienceData(L1Product):
 
         ct_de = np.diff(counts_axis.value)
 
-        srm = srm_dict['srm'] * ct_de[None,:]
-        ph_ax_mids = srm_dict['ph_axis'][:-1] + 0.5*np.diff(srm_dict['ph_axis'])
+        srm = srm_dict["srm"] * ct_de[None, :]
+        ph_ax_mids = srm_dict["ph_axis"][:-1] + 0.5 * np.diff(srm_dict["ph_axis"])
 
         index = np.where(ph_ax_mids <= 3.7)[0]
 
-        srm_trim = srm[index[-1]:]
+        srm_trim = srm[index[-1] :]
 
-        ph_ax_bins = np.column_stack((srm_dict['ph_axis'][:-1], srm_dict['ph_axis'][1:]))
+        ph_ax_bins = np.column_stack((srm_dict["ph_axis"][:-1], srm_dict["ph_axis"][1:]))
 
-        ph_ax_bins_trim = ph_ax_bins[index[-1]:]
+        ph_ax_bins_trim = ph_ax_bins[index[-1] :]
 
-        ph_energies_trim = np.concatenate([ph_ax_bins_trim[:,0], ph_ax_bins_trim[:,1][-1:]])
+        ph_energies_trim = np.concatenate([ph_ax_bins_trim[:, 0], ph_ax_bins_trim[:, 1][-1:]])
         # return srm_trim, ph_energies_trim
 
         # print(ph_ax_bins_trim)
 
-
         meta.add("exposure_time", np.sum(t_norm))
-        meta.add("geo_area", srm_dict['geo_area'])
-        meta.add("date-obs",  data_dict['times'])
-        meta.add("angle",flare_angle*u.deg)
-        meta.add("distance",distance)
-        meta.add("srm",srm_trim)
-        meta.add("ph_axis",ph_energies_trim*u.keV)
-        meta.add("time_range",event_time_range)
+        meta.add("geo_area", srm_dict["geo_area"])
+        meta.add("date-obs", data_dict["times"])
+        meta.add("angle", flare_angle * u.deg)
+        meta.add("distance", distance)
+        meta.add("srm", srm_trim)
+        meta.add("ph_axis", ph_energies_trim * u.keV)
+        meta.add("time_range", event_time_range)
 
-        spec_1d = Spectrum(data=counts_final,uncertainty=counts_uncertainity_pu, spectral_axis=counts_spectral_axis, meta=meta)
+        spec_1d = Spectrum(
+            data=counts_final, uncertainty=counts_uncertainity_pu, spectral_axis=counts_spectral_axis, meta=meta
+        )
 
         return spec_1d
 
-# NEED TO ADD IN THE DIST AND ANGLE READING AND BKG_SUBTRACT, GETTING THERE THOUGH!!!
+    # NEED TO ADD IN THE DIST AND ANGLE READING AND BKG_SUBTRACT, GETTING THERE THOUGH!!!
 
     def bkg_subtract(self, bkg_data):
 
         spec_unsub = self.get_spectrum()
-        
-        times = spec_unsub['times']
-        time_bins = spec_unsub['time_bin']
-        rate= spec_unsub['rate']
-        rate_err = spec_unsub['rate_err']
-        energies = spec_unsub['energies']
 
-        bkg_time_bin = bkg_data['time_bin']
+        times = spec_unsub["times"]
+        time_bins = spec_unsub["time_bin"]
+        rate = spec_unsub["rate"]
+        rate_err = spec_unsub["rate_err"]
+        energies = spec_unsub["energies"]
+
+        bkg_time_bin = bkg_data["time_bin"]
         # print(bkg_data['rate'])
-        bkg_rate = (bkg_data['rate'] / bkg_time_bin) * time_bins[:,np.newaxis]
+        bkg_rate = (bkg_data["rate"] / bkg_time_bin) * time_bins[:, np.newaxis]
 
-# LIVETIME CORRECTED + EFFECTIVE LIVEWTIME MIGHT WORK
+        # LIVETIME CORRECTED + EFFECTIVE LIVEWTIME MIGHT WORK
 
         # print(bkg_rate)
-        bkg_rate_err = (bkg_data['rate_err'] / bkg_time_bin) * time_bins[:,np.newaxis]
-        bkg_energies = bkg_data['energies']
+        bkg_rate_err = (bkg_data["rate_err"] / bkg_time_bin) * time_bins[:, np.newaxis]
+        bkg_energies = bkg_data["energies"]
 
-        _, _, indices_sub = np.intersect1d(
-            energies['e_low'],
-            bkg_energies['e_low'],
-            return_indices=True
-        )
+        _, _, indices_sub = np.intersect1d(energies["e_low"], bkg_energies["e_low"], return_indices=True)
 
         # print(energies)
         # print(bkg_energies)
@@ -1457,40 +1053,42 @@ class ScienceData(L1Product):
         # print('e_dat = ',energies)
         # print('in_sub = ',indices_sub)
 
-        bkg_rate_sub = bkg_rate[:,indices_sub]
-        bkg_rate_err_sub = bkg_rate_err[:,indices_sub]
+        bkg_rate_sub = bkg_rate[:, indices_sub]
+        bkg_rate_err_sub = bkg_rate_err[:, indices_sub]
 
         rate_sub = rate - bkg_rate_sub
-        rate_err_sub = np.sqrt((rate_err.value**2) + (bkg_rate_err_sub.value**2))  *u.ct
+        rate_err_sub = np.sqrt((rate_err.value**2) + (bkg_rate_err_sub.value**2)) * u.ct
 
-        spec_sub = {'rate_bkg_sub':rate_sub,
-                    'rate_err_bkg_sub':rate_err_sub,
-                    'rate':rate,
-                    'rate_err':rate_err,
-                    'rate_bkg':bkg_rate,
-                    'rate_err_bkg':bkg_rate_err,
-                    'times':times,
-                    'time_bin':time_bins,
-                    'energies':energies}
-        
+        spec_sub = {
+            "rate_bkg_sub": rate_sub,
+            "rate_err_bkg_sub": rate_err_sub,
+            "rate": rate,
+            "rate_err": rate_err,
+            "rate_bkg": bkg_rate,
+            "rate_err_bkg": bkg_rate_err,
+            "times": times,
+            "time_bin": time_bins,
+            "energies": energies,
+        }
+
         return spec_sub
 
-    def get_masked_srm(self,flare_location):
+    def get_masked_srm(self, flare_location):
 
-        PATH_DRM = '/home/jmitchell/software/stixpy-dev/stixpy/config/data/detector/'
-        drm = np.load(PATH_DRM+'stx_drm_energy.npz')["data"]
-        ph_energies = np.load(PATH_DRM+'stx_ph_edges.npy')
-        ct_energies = np.load(PATH_DRM+'stx_ct_edges.npy')
-        
+        PATH_DRM = "/home/jmitchell/software/stixpy-dev/stixpy/config/data/detector/"
+        drm = np.load(PATH_DRM + "stx_drm_energy.npz")["data"]
+        ph_energies = np.load(PATH_DRM + "stx_ph_edges.npy")
+        ct_energies = np.load(PATH_DRM + "stx_ct_edges.npy")
+
         # max_stix = estimate_flare_location(self,time_range)
 
         energies = self.energies
-        e_low = np.array(energies['e_low'])
+        e_low = np.array(energies["e_low"])
 
         if e_low[0] == 0:
             e_low = e_low[1:]
 
-        e_high = np.array(energies['e_high'])
+        e_high = np.array(energies["e_high"])
 
         e_high = e_high[~np.isnan(e_high)]
 
@@ -1501,7 +1099,7 @@ class ScienceData(L1Product):
             e_edges = e_low
             ct_e_diff = np.diff(e_edges)
         else:
-            e_edges = np.concatenate([e_low,[e_high[-1]]])
+            e_edges = np.concatenate([e_low, [e_high[-1]]])
             ct_e_diff = np.diff(e_edges)
 
         # print('ct_shape = ',len(ct_e_diff))
@@ -1514,24 +1112,13 @@ class ScienceData(L1Product):
 
         epsilon = 1e-4
 
-        mask_not_in_e = ~np.isclose(
-            ct_energies[:, None],
-            e_edges[None, :],
-            atol=epsilon
-        ).any(axis=1)
+        mask_not_in_e = ~np.isclose(ct_energies[:, None], e_edges[None, :], atol=epsilon).any(axis=1)
 
         values_to_remove = ct_energies[mask_not_in_e]
 
         indices_to_remove = np.where(
-            np.isclose(
-                ph_energies[:, None],
-                values_to_remove[None, :],
-                atol=epsilon
-            ).any(axis=1)
+            np.isclose(ph_energies[:, None], values_to_remove[None, :], atol=epsilon).any(axis=1)
         )[0]
-
-
-
 
         drm_clipped = np.delete(drm, indices_to_remove, axis=0)
         drm_clipped = np.delete(drm_clipped, indices_to_remove, axis=1)
@@ -1540,21 +1127,21 @@ class ScienceData(L1Product):
 
         ph_e_diff = np.diff(ph_energies_clipped)
 
-
         pixel_areas = STIX_INSTRUMENT.pixel_config["Area"].to("cm2")
 
-        det_indices_top24 =  np.array([0, 1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 19, 
-                                     20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31])
-        
-        det_indices_full = np.where(self.detector_masks.__dict__['masks'] == 1 )[1]
+        det_indices_top24 = np.array(
+            [0, 1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]
+        )
 
-        det_indices = [d for i,d in enumerate(det_indices_top24) if d in det_indices_full]
+        det_indices_full = np.where(self.detector_masks.__dict__["masks"] == 1)[1]
 
-        pix_indices = np.where(self.pixel_masks.__dict__['masks'] == 1 )[1]
+        det_indices = [d for i, d in enumerate(det_indices_top24) if d in det_indices_full]
+
+        pix_indices = np.where(self.pixel_masks.__dict__["masks"] == 1)[1]
 
         pixel_areas = pixel_areas[pix_indices].value
 
-        area_scale = len(det_indices)*np.sum(pixel_areas)
+        area_scale = len(det_indices) * np.sum(pixel_areas)
 
         energy_widths = np.diff(ph_energies_clipped)
 
@@ -1563,34 +1150,31 @@ class ScienceData(L1Product):
         trans = Transmission()
 
         tot_trans = trans.get_transmission(energies=e_mids * u.keV)
-        
+
         attenuation = np.zeros(len(tot_trans["det-1"]))
 
-        for i,det in enumerate(det_indices):
-            attenuation += tot_trans[f'det-{det}']
+        for i, det in enumerate(det_indices):
+            attenuation += tot_trans[f"det-{det}"]
 
         attenuation = attenuation / len(det_indices)
 
-        # drm_clipped = ((drm_clipped * attenuation[:,None] ) * area_scale) 
-        drm_clipped = ((drm_clipped * ph_e_diff[None,:] * attenuation[:,None] ))  
+        # drm_clipped = ((drm_clipped * attenuation[:,None] ) * area_scale)
+        drm_clipped = (drm_clipped * ph_e_diff[None, :] * attenuation[:, None]).to("s")
 
         drm_new = []
 
         for j in range(np.shape(drm_clipped)[0]):
-
             working = []
 
-            for i in range(len(e_edges)-1):
-            
-                indices_sum = np.where((ph_energies_clipped >= e_edges[i]) & 
-                                    (ph_energies_clipped < e_edges[i+1]))[0]            
+            for i in range(len(e_edges) - 1):
+                indices_sum = np.where((ph_energies_clipped >= e_edges[i]) & (ph_energies_clipped < e_edges[i + 1]))[0]
 
-                tot = drm_clipped[j,indices_sum].sum(axis=0)
+                tot = drm_clipped[j, indices_sum].sum(axis=0)
 
                 working.append(tot)
-            
+
             drm_new.append(working)
-        
+
         drm_new = np.array(drm_new)
 
         # tr = TimeRange(vis.meta.time_range)
@@ -1598,15 +1182,14 @@ class ScienceData(L1Product):
         # solo_coord = HeliographicStonyhurst(solo_heeq, representation_type="cartesian", obstime=tr.center)
         # flare_location = flare_location.transform_to(STIXImaging(obstime=tr.center, observer=solo_coord))
 
-        grid_transmission = get_grid_transmission(e_mids, flare_location)     
+        grid_transmission = get_grid_transmission(e_mids, flare_location)
 
         grid_transmission = grid_transmission.mean(axis=1)
 
-        srm = (drm_new * grid_transmission[:,None]) / ct_e_diff[None,:]
-        # srm = (drm_new * grid_transmission[:,None]) 
+        srm = (drm_new * grid_transmission[:, None]) / ct_e_diff[None, :]
+        # srm = (drm_new * grid_transmission[:,None])
 
-        return {'srm':srm,'ph_axis':ph_energies_clipped,'geo_area':area_scale}
-
+        return {"srm": srm, "ph_axis": ph_energies_clipped, "geo_area": area_scale}
 
     def concatenate(self, others):
         """
@@ -1887,7 +1470,7 @@ class Spectrogram(ScienceData, TimesSeriesPlotMixin, SpectrogramPlotMixin):
 
     Parameters
     ----------
-    header : `astropy.fits.Header`
+    meta : `astropy.fits.Header`
     control : `astropy.table.QTable`
     data : `astropy.table.QTable`
     energies : `astropy.table.QTable`
@@ -1923,7 +1506,7 @@ class Spectrogram(ScienceData, TimesSeriesPlotMixin, SpectrogramPlotMixin):
 
         Parameters
         ----------
-        header : astropy.fits.Header
+        meta : astropy.fits.Header
         control : astropy.table.QTable
         data : astropy.table.QTable
         energies : astropy.table.QTable
@@ -1960,7 +1543,7 @@ def calc_count_rate(dat):
 
     rate, rate_err, _, t_norm_cs, energies, _, cor = dat
 
-    de = np.array(energies['e_high'] - energies['e_low'])
+    de = np.array(energies["e_high"] - energies["e_low"])
 
     rate = np.array(rate)
     rate_err = np.array(rate_err)
@@ -1976,49 +1559,7 @@ def calc_count_rate(dat):
     result_count_rate = counts / t_norm
     result_count_rate_err = counts_err / t_norm
 
-    result_count_rate = result_count_rate[:, :, :8, :].sum(axis=(1,2)) * cor
-    result_count_rate_err = result_count_rate_err[:, :, :8, :].sum(axis=(1,2)) * cor
+    result_count_rate = result_count_rate[:, :, :8, :].sum(axis=(1, 2)) * cor
+    result_count_rate_err = result_count_rate_err[:, :, :8, :].sum(axis=(1, 2)) * cor
 
     return result_count_rate, result_count_rate_err
-
-
-
-# pixel_areas = STIX_INSTRUMENT.pixel_config["Area"].to("cm2")
-
-# print(pixel_areas)
-
-# det_indices_top24 =  np.array([0, 1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 19, 
-#                              20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31])
-
-# det_indices_full = np.where(self.detector_masks.__dict__['masks'] == 1 )[1]
-
-# det_indices = [d for i,d in enumerate(det_indices_top24) if d in det_indices_full]
-
-# # pix_indices = np.where(self.pixel_masks.__dict__['masks'] == 1 )[1]
-# pix_indices = [0,1,2,3,4,5,6,7]
-
-# pixel_areas = pixel_areas[pix_indices].value
-
-# area_scale = len(det_indices)*np.sum(pixel_areas)
-
-# energy_widths = np.diff(ph_energies)
-
-# e_mids = ph_energies[:-1] + (energy_widths / 2)
-
-# trans = Transmission()
-
-# print('e_mids = ',e_mids)
-
-# tot_trans = trans.get_transmission(energies=e_mids * u.keV)
-
-# # attenuation = tot_trans["det-0"]
-
-# attenuation = np.zeros(len(tot_trans["det-1"]))
-
-# for i,det in enumerate(det_indices):
-#     attenuation += tot_trans[f'det-{det}']
-
-# attenuation = attenuation / len(det_indices)
-
-
-# srm = ((drm_new * attenuation[:, None] ) * area_scale) / 4

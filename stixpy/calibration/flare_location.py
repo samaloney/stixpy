@@ -1,40 +1,38 @@
-
-import logging
+import numpy as np
+from xrayvision.imaging import vis_to_image
 
 import astropy.units as u
-import matplotlib.pyplot as plt
-import numpy as np
 from astropy.coordinates import SkyCoord
+
 from sunpy.coordinates import HeliographicStonyhurst, Helioprojective, frames
 from sunpy.map import Map, make_fitswcs_header
 from sunpy.time import TimeRange
-from xrayvision.clean import vis_clean
-from xrayvision.imaging import vis_to_image, vis_to_map
-from xrayvision.mem import mem, resistant_mean
 
 from stixpy.calibration.visibility import calibrate_visibility, create_meta_pixels, create_visibility
 from stixpy.coordinates.frames import STIXImaging
 from stixpy.coordinates.transforms import get_hpc_info
-from stixpy.imaging.em import em
 from stixpy.map.stix import STIXMap  # noqa
 from stixpy.product import Product
-
-
 
 __all__ = [
     "estimate_flare_location",
 ]
 
-def estimate_flare_location(sci_file,time_range_sci):
 
-    energy_range = [6.,10.] * u.keV
-    imsize = [512,512] * u.pixel
+def estimate_flare_location(sci_file, time_range_sci):
+
+    energy_range = [6.0, 10.0] * u.keV
+    imsize = [512, 512] * u.pixel
     pixel = [10, 10] * u.arcsec / u.pixel
 
     cpd_sci = Product(sci_file)
 
     meta_pixels_sci = create_meta_pixels(
-        cpd_sci, time_range=time_range_sci, energy_range=energy_range, flare_location=[0, 0] * u.arcsec, no_shadowing=True
+        cpd_sci,
+        time_range=time_range_sci,
+        energy_range=energy_range,
+        flare_location=[0, 0] * u.arcsec,
+        no_shadowing=True,
     )
 
     vis = create_visibility(meta_pixels_sci)
@@ -73,7 +71,6 @@ def estimate_flare_location(sci_file,time_range_sci):
     stx_x = max_stix.Tx.value
     stx_y = max_stix.Ty.value
 
-    dictionary = {'stx':np.array([stx_x,stx_y]),
-                  'hpc':np.array([hpc_x,hpc_y])}
+    dictionary = {"stx": np.array([stx_x, stx_y]), "hpc": np.array([hpc_x, hpc_y])}
 
     return dictionary

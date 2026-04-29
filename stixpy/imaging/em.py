@@ -1,16 +1,17 @@
-from typing import Optional
 from pathlib import Path
 from collections.abc import Sequence
 
-import astropy.units as apu
 import numpy as np
+from xrayvision.transform import generate_xy
+from xrayvision.visibility import Visibilities
+
+import astropy.units as apu
 from astropy.coordinates import SkyCoord
 from astropy.table.table import Table
 from astropy.units import Quantity
+
 from sunpy.coordinates import HeliographicStonyhurst
 from sunpy.time import TimeRange
-from xrayvision.transform import generate_xy
-from xrayvision.visibility import Visibilities
 
 from stixpy.coordinates.frames import STIXImaging
 from stixpy.coordinates.transforms import get_hpc_info
@@ -104,7 +105,7 @@ def em(
     flare_location: SkyCoord,
     maxiter: int = 5000,
     tolerance: float = 0.001,
-    idx: Optional[Sequence[int]] = None,
+    idx: Sequence[int] | None = None,
 ):
     r"""
     Count-based expectation maximisation imaging algorithm.

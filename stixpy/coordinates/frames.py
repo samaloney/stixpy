@@ -1,10 +1,9 @@
 import astropy
 import astropy.coordinates as coord
 import astropy.units as u
-import numpy as np
 from astropy.coordinates import QuantityAttribute
-from astropy.time import Time
 from astropy.wcs import WCS
+
 from sunpy.coordinates.frameattributes import ObserverCoordinateAttribute, TimeFrameAttributeSunPy
 from sunpy.coordinates.frames import HeliographicStonyhurst, SunPyBaseCoordinateFrame
 from sunpy.sun.constants import radius as _RSUN
@@ -75,13 +74,16 @@ class STIXImaging(SunPyBaseCoordinateFrame):
     @property
     def obstime_avg(self):
         r"""Average time of the observation 'mean(obstime, obstime_end)'."""
-        return np.mean(Time([self.obstime, self.obstime_end]))
+        return self.obstime + (self.obstime_end - self.obstime) / 2
 
     def __init__(self, *args, **kwargs):
+        # If `obstime_end` isn't provided, default it to `obstime`.
+        if "obstime_end" not in kwargs and "obstime" in kwargs:
+            kwargs["obstime_end"] = kwargs["obstime"]
         super().__init__(*args, **kwargs)
         if self.obstime is not None and self.obstime_end is not None:
             if self.obstime.shape != self.obstime_end.shape:
-                raise ValueError("Both obstime and obstime_end must be either scaler or 1d array os same size.")
+                raise ValueError("Both 'obstime' and 'obstime_end' must be either scaler or 1d array of the same size.")
 
 
 def stix_wcs_to_frame(wcs):
